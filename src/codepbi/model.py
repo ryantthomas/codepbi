@@ -13,6 +13,23 @@ SINGLE_ROLE_KEY = {
 }
 
 
+def column_width(query_ref: str, pixels: float) -> dict:
+    """An `objects.columnWidth` entry for a table/matrix column, keyed by the column's
+    queryRef (e.g. "Organizations.Organization Name" -- the same string Field.query_ref
+    produces). Confirmed from a real Desktop-saved manual column resize: table/matrix
+    columns are NOT sized from container width alone -- Desktop persists an explicit
+    per-column pixel width once you drag one, and that's the only mechanical lever
+    available (there's no formula from container width + data, since actual column
+    width depends on live data this generator never sees).
+
+    Usage: matrix.objects["columnWidth"] = [column_width("Orders.Region", 200)]
+    """
+    return {
+        "properties": {"value": {"expr": {"Literal": {"Value": f"{pixels}D"}}}},
+        "selector": {"metadata": query_ref},
+    }
+
+
 @dataclass
 class Field:
     """A column or measure reference projected onto a visual, e.g.

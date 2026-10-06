@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codepbi import Field, Filter, Position, Report
+from codepbi import Field, Filter, Position, Report, column_width
 
 
 class TestWriteReport(unittest.TestCase):
@@ -233,6 +233,23 @@ class TestWriteReport(unittest.TestCase):
             visual_json = self._visual_json(report, report_dir, page, card)
             self.assertIn("objects", visual_json["visual"])
             self.assertIn("visualContainerObjects", visual_json["visual"])
+
+    def test_column_width_sets_explicit_pixel_width_by_query_ref(self):
+        report = Report(name="Matrix Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        org_name = Field("Projects", "Program Name")
+        matrix = page.add_matrix(
+            rows=[org_name],
+            values=[Field("Orders", "Total Sales", is_measure=True)],
+            position=Position(x=0, y=0, width=400, height=300),
+        )
+        matrix.objects = {"columnWidth": [column_width(org_name.query_ref, 350)]}
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, matrix)
+            entry = visual_json["visual"]["objects"]["columnWidth"][0]
+            self.assertEqual(entry["selector"]["metadata"], "Projects.Program Name")
+            self.assertEqual(entry["properties"]["value"]["expr"]["Literal"]["Value"], "350D")
 
 
 if __name__ == "__main__":
