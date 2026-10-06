@@ -24,3 +24,23 @@ optional sub-fields of `themeCollection` itself, and no physical theme file (`St
 is required for a valid empty `themeCollection` — Desktop just applies its own default theme.
 
 **Found:** 2026-10-06, `codepbi` v0.1.1, building a test report against a real production model.
+
+---
+
+## A field projection's wrapper key depends on whether it's a column or a measure
+
+**Symptom:** None yet observed directly -- caught by comparing real Desktop-saved `card` and
+`pivotTable` visuals (which project DAX measures) against the `tableEx`/`slicer` examples we'd
+been copying from (which project raw columns).
+
+**Cause:** A projected field's `field` object wraps its `Expression`/`Property` pair in either
+`"Column": {...}` or `"Measure": {...}` depending on what it actually is. Every example we'd seen
+until now happened to be a column, so the code only ever emitted `"Column"`. Plotting a measure on
+a chart, card, or matrix (the normal case for most charts) needs `"Measure"` instead -- getting it
+wrong likely wouldn't error cleanly, it would just silently fail to resolve the field.
+
+**Fix:** `Field` carries an explicit `is_measure` flag; the writer picks the wrapper key from it
+instead of assuming `"Column"` always.
+
+**Found:** 2026-10-06, `codepbi` v0.1.2 (unreleased), cross-checking real `card`/`pivotTable`
+examples before building chart-type support.

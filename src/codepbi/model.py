@@ -4,17 +4,25 @@ from dataclasses import dataclass, field
 
 from .ids import hex_id
 
-ROLE_KEY_OVERRIDES = {"slicer": "Field"}
-DEFAULT_ROLE_KEY = "Values"
+# Single-role visuals: visualType -> the one query role every projected field goes under.
+SINGLE_ROLE_KEY = {
+    "slicer": "Field",
+    "tableEx": "Values",
+    "card": "Values",
+    "multiRowCard": "Values",
+}
 
 
 @dataclass
 class Field:
-    """A column reference projected onto a visual, e.g. Field("Projects", "Project Title")."""
+    """A column or measure reference projected onto a visual, e.g.
+    Field("Projects", "Project Title") for a column, or
+    Field("Orders", "Total Sales", is_measure=True) for a measure."""
 
     entity: str
     property: str
     native_name: str | None = None
+    is_measure: bool = False
 
     @property
     def query_ref(self) -> str:
@@ -61,16 +69,22 @@ class Filter:
 
 @dataclass
 class Visual:
-    visual_type: str  # "tableEx", "slicer", "card", "pivotTable"
-    fields: list[Field]
+    """roles maps a visual-type-specific query role name (e.g. "Category", "Y", "Series" for a
+    chart; "Values" for a table/card; "Field" for a slicer) to the fields projected onto it.
+    Role names are NOT uniform across visual types -- see LESSONS_LEARNED.md.
+
+    objects / visual_container_objects are passed straight through to the visual's own JSON
+    (per-visual-type formatting and title/background/border respectively) -- see
+    LESSONS_LEARNED.md for confirmed shapes pulled from real Desktop-saved reports."""
+
+    visual_type: str
+    roles: dict[str, list[Field]]
     position: Position
     filters: list[Filter] = field(default_factory=list)
     name: str = field(default_factory=hex_id)
     drill_filter_other_visuals: bool = True
-
-    @property
-    def role_key(self) -> str:
-        return ROLE_KEY_OVERRIDES.get(self.visual_type, DEFAULT_ROLE_KEY)
+    objects: dict = field(default_factory=dict)
+    visual_container_objects: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -85,22 +99,79 @@ class Page:
     def add_visual(
         self,
         visual_type: str,
-        fields: list[Field],
+        roles: dict[str, list[Field]],
         position: Position,
         filters: list[Filter] | None = None,
+        objects: dict | None = None,
+        visual_container_objects: dict | None = None,
     ) -> Visual:
-        visual = Visual(visual_type, fields, position, filters or [])
+        visual = Visual(
+            visual_type, roles, position, filters or [],
+            objects=objects or {}, visual_container_objects=visual_container_objects or {},
+        )
         self.visuals.append(visual)
         return visual
 
+    def _add_single_role(self, visual_type: str, fields: list[Field], position: Position,
+                          filters: list[Filter] | None = None) -> Visual:
+        return self.add_visual(visual_type, {SINGLE_ROLE_KEY[visual_type]: fields}, position, filters)
+
     def add_table(self, fields: list[Field], position: Position, filters: list[Filter] | None = None) -> Visual:
-        return self.add_visual("tableEx", fields, position, filters)
+        return self._add_single_role("tableEx", fields, position, filters)
 
     def add_slicer(self, field_: Field, position: Position) -> Visual:
-        return self.add_visual("slicer", [field_], position)
+        return self._add_single_role("slicer", [field_], position)
 
     def add_card(self, field_: Field, position: Position) -> Visual:
-        return self.add_visual("card", [field_], position)
+        return self._add_single_role("card", [field_], position)
+
+    def add_multi_row_card(self, fields: list[Field], position: Position) -> Visual:
+        return self._add_single_role("multiRowCard", fields, position)
+
+    def add_matrix(
+        self, rows: list[Field], values: list[Field], position: Position,
+        columns: list[Field] | None = None,
+    ) -> Visual:
+        roles = {"Rows": rows, "Values": values}
+        if columns:
+            roles["Columns"] = columns
+        return self.add_visual("pivotTable", roles, position)
+
+    def add_bar_chart(
+        self, category: Field, values: list[Field], position: Position,
+        series: Field | None = None, clustered: bool = True,
+    ) -> Visual:
+        roles = {"Category": [category], "Y": values}
+        if series:
+            roles["Series"] = [series]
+        visual_type = "clusteredBarChart" if clustered else "barChart"
+        return self.add_visual(visual_type, roles, position)
+
+    def add_column_chart(
+        self, category: Field, values: list[Field], position: Position,
+        series: Field | None = None, clustered: bool = True,
+    ) -> Visual:
+        roles = {"Category": [category], "Y": values}
+        if series:
+            roles["Series"] = [series]
+        visual_type = "clusteredColumnChart" if clustered else "columnChart"
+        return self.add_visual(visual_type, roles, position)
+
+    def add_line_chart(
+        self, category: Field, values: list[Field], position: Position,
+        series: Field | None = None,
+    ) -> Visual:
+        roles = {"Category": [category], "Y": values}
+        if series:
+            roles["Series"] = [series]
+        return self.add_visual("lineChart", roles, position)
+
+    def add_combo_chart(
+        self, category: Field, column_values: list[Field], line_values: list[Field],
+        position: Position,
+    ) -> Visual:
+        roles = {"Category": [category], "Y": column_values, "Y2": line_values}
+        return self.add_visual("lineClusteredColumnComboChart", roles, position)
 
 
 @dataclass

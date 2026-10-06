@@ -21,9 +21,10 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def _field_ref(entity: str, property_: str) -> dict:
+def _field_ref(entity: str, property_: str, is_measure: bool = False) -> dict:
+    wrapper = "Measure" if is_measure else "Column"
     return {
-        "Column": {
+        wrapper: {
             "Expression": {"SourceRef": {"Entity": entity}},
             "Property": property_,
         }
@@ -32,7 +33,7 @@ def _field_ref(entity: str, property_: str) -> dict:
 
 def _projection(f) -> dict:
     return {
-        "field": _field_ref(f.entity, f.property),
+        "field": _field_ref(f.entity, f.property, f.is_measure),
         "queryRef": f.query_ref,
         "nativeQueryRef": f.native_query_ref,
     }
@@ -71,6 +72,19 @@ def _filter_json(filt: Filter) -> dict:
 
 def _visual_json(visual: Visual) -> dict:
     pos = visual.position
+    query_state = {
+        role: {"projections": [_projection(f) for f in fields]}
+        for role, fields in visual.roles.items()
+    }
+    visual_body = {
+        "visualType": visual.visual_type,
+        "query": {"queryState": query_state},
+        "drillFilterOtherVisuals": visual.drill_filter_other_visuals,
+    }
+    if visual.objects:
+        visual_body["objects"] = visual.objects
+    if visual.visual_container_objects:
+        visual_body["visualContainerObjects"] = visual.visual_container_objects
     data = {
         "$schema": VISUAL_SCHEMA,
         "name": visual.name,
@@ -82,15 +96,7 @@ def _visual_json(visual: Visual) -> dict:
             "width": pos.width,
             "tabOrder": pos.tab_order,
         },
-        "visual": {
-            "visualType": visual.visual_type,
-            "query": {
-                "queryState": {
-                    visual.role_key: {"projections": [_projection(f) for f in visual.fields]}
-                }
-            },
-            "drillFilterOtherVisuals": visual.drill_filter_other_visuals,
-        },
+        "visual": visual_body,
     }
     if visual.filters:
         data["filterConfig"] = {"filters": [_filter_json(f) for f in visual.filters]}
