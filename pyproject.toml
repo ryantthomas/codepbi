@@ -1,0 +1,25 @@
+[project]
+name = "codepbi"
+version = "0.1.0"
+description = "Code-first Power BI — define pages/visuals in Python and emit a working PBIP/PBIR report; sync a TMDL semantic model from a dbt project."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Ryan Thomas" }]
+dependencies = []
+
+[project.optional-dependencies]
+# Only needed for codepbi.semantic (dbt -> TMDL sync). Requires the
+# Microsoft.AnalysisServices .NET DLLs separately -- see codepbi/semantic/tom_utils.py.
+semantic = ["pyyaml", "sqlglot", "pythonnet"]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/ryantthomas/codepbi"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
