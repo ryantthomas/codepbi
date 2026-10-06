@@ -208,13 +208,23 @@ class Page:
         self.visuals.append(group)
         return group
 
-    def add_text_box(self, text: str, position: Position, font_size: str | None = None) -> Visual:
+    def add_text_box(
+        self, text: str, position: Position, font_size: str | None = None, bold: bool = False,
+    ) -> Visual:
         """A static text box -- confirmed shape from a real Desktop-saved textbox. No query
         roles; content lives entirely in objects.general.paragraphs. Note the text `value` is
-        a plain string here, NOT the usual Literal/expr wrapper every other property uses."""
-        text_run = {"value": text}
+        a plain string here, NOT the usual Literal/expr wrapper every other property uses.
+        There is no vertical-alignment property for this visual (checked, and confirmed absent
+        in a real example) -- center it relative to other visuals by sizing its box tightly
+        around the text and aligning box centers, not by looking for an alignment property."""
+        text_style = {}
         if font_size:
-            text_run["textStyle"] = {"fontSize": font_size}
+            text_style["fontSize"] = font_size
+        if bold:
+            text_style["fontWeight"] = "bold"
+        text_run = {"value": text}
+        if text_style:
+            text_run["textStyle"] = text_style
         objects = {"general": [{"properties": {"paragraphs": [{"textRuns": [text_run]}]}}]}
         return self.add_visual("textbox", {}, position, objects=objects)
 

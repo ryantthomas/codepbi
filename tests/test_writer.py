@@ -370,6 +370,16 @@ class TestWriteReport(unittest.TestCase):
             self.assertEqual(run["value"], "Sample Title")
             self.assertEqual(run["textStyle"]["fontSize"], "28pt")
 
+    def test_text_box_bold(self):
+        report = Report(name="Bold Textbox Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        box = page.add_text_box("Title", Position(x=0, y=0, width=300, height=80), font_size="28pt", bold=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, box)
+            run = visual_json["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]
+            self.assertEqual(run["textStyle"]["fontWeight"], "bold")
+
     def test_image_resource_bundled_and_referenced(self):
         with tempfile.TemporaryDirectory() as tmp:
             logo_path = Path(tmp) / "logo.png"
