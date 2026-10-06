@@ -1,0 +1,8 @@
+version: 2
+semantic_models:
+  - name: customers
+    model: ref('dim_customer')
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id

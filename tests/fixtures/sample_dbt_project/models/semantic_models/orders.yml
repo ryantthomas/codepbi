@@ -1,0 +1,17 @@
+version: 2
+semantic_models:
+  - name: orders
+    model: ref('fact_orders')
+    entities:
+      - name: customer
+        type: foreign
+        expr: customer_id
+    measures:
+      - name: total_order_amount
+        agg: sum
+        label: Total Order Amount
+        description: "Total across selected orders. DAX: SUM('Orders'[Order Amount])"
+        config:
+          meta:
+            format_string: '$#,0.00'
+            displayFolder: Calculations

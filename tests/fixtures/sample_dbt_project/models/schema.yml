@@ -1,0 +1,48 @@
+version: 2
+models:
+  - name: fact_orders
+    description: One row per order.
+    meta:
+      entity: Orders
+      additivity: additive
+      layer: core
+    columns:
+      - name: order_id
+        description: Primary key.
+        meta:
+          display_name: Order ID
+          displayFolder: Identifiers
+          data_type: int64
+      - name: customer_id
+        description: Foreign key to customers.
+        meta:
+          display_name: Customer ID
+          displayFolder: Identifiers
+          data_type: int64
+          hidden: true
+      - name: order_amount
+        description: Dollar amount of the order.
+        meta:
+          display_name: Order Amount
+          displayFolder: Values
+          data_type: double
+          format_string: '$#,0.00'
+          summarize_by: sum
+
+  - name: dim_customer
+    description: One row per customer.
+    meta:
+      entity: Customers
+    columns:
+      - name: customer_id
+        description: Primary key.
+        meta:
+          display_name: Customer ID
+          displayFolder: Identifiers
+          data_type: int64
+      - name: customer_name
+        description: Customer's name.
+        meta:
+          display_name: Customer Name
+          displayFolder: Attributes
+          data_type: string
