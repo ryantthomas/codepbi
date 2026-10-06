@@ -12,8 +12,13 @@ from .schema_loader import load_schema
 
 
 def check(config: TmdlProjectConfig) -> int:
+    if config.dbt_manifest_path is None or config.dbt_compiled_dir is None:
+        raise SystemExit(
+            "check_schema_vs_sql requires config.dbt_manifest_path and "
+            "config.dbt_compiled_dir to be set."
+        )
     schema = load_schema(config)
-    model_data = load_model_data(config.dbt_project_dir / "target")
+    model_data = load_model_data(config.dbt_manifest_path, config.dbt_compiled_dir)
     errors = []
     checked = 0
 

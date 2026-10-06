@@ -27,6 +27,11 @@ class TmdlProjectConfig:
         Unused by anything in this package; purely a passthrough so callers don't have to
         re-parse schema YAML themselves just to read one more field.
     extra_table_meta: same idea as extra_column_meta, but for per-table `meta.*` keys.
+    dbt_manifest_path: path to target/manifest.json, only needed for check_schema_vs_sql.
+    dbt_compiled_dir: folder compiled SQL is actually written under -- dbt's real layout is
+        target/compiled/<dbt_project_name>/<model-paths>/..., which isn't generically
+        derivable, so this must be the fully resolved path. Only needed for
+        check_schema_vs_sql.
     """
 
     dbt_project_dir: Path
@@ -37,11 +42,17 @@ class TmdlProjectConfig:
     skip_tables: set[str] = field(default_factory=set)
     extra_column_meta: dict[str, str] = field(default_factory=dict)
     extra_table_meta: dict[str, str] = field(default_factory=dict)
+    dbt_manifest_path: Path | None = None
+    dbt_compiled_dir: Path | None = None
 
     def __post_init__(self) -> None:
         self.dbt_project_dir = Path(self.dbt_project_dir)
         self.semantic_model_definition_dir = Path(self.semantic_model_definition_dir)
         self.tom_lib_dir = Path(self.tom_lib_dir)
+        if self.dbt_manifest_path is not None:
+            self.dbt_manifest_path = Path(self.dbt_manifest_path)
+        if self.dbt_compiled_dir is not None:
+            self.dbt_compiled_dir = Path(self.dbt_compiled_dir)
 
     @property
     def tables_dir(self) -> Path:

@@ -32,12 +32,19 @@ def sql_exprs(sql: str, dialect: str = "tsql") -> dict:
     return result
 
 
-def load_model_data(target_dir: Path) -> dict:
+def load_model_data(manifest_path: Path, compiled_dir: Path) -> dict:
     """dbt model name -> {dbt_db, dbt_schema, sql, compiled_path, compiled_exists}.
+
+    manifest_path: path to target/manifest.json.
+    compiled_dir: the folder compiled SQL is actually written under -- dbt's real
+        layout is target/compiled/<dbt_project_name>/<model-paths>/..., and the
+        project name and model-paths config aren't generically derivable, so the
+        caller must resolve this themselves (it's just target/compiled/<your
+        project name>/models for the common case).
 
     The compiled path comes from the manifest node's own `path` (relative to
     model-paths), not from the bare model name -- dbt writes to
-    compiled/.../models/<subfolder>/<name>.sql, so a name-only lookup misses the
+    <compiled_dir>/<subfolder>/<name>.sql, so a name-only lookup misses the
     moment models live in folders.
 
     The raw_code fallback is kept for models that genuinely have no compiled
@@ -45,8 +52,7 @@ def load_model_data(target_dir: Path) -> dict:
     failing, which yields silently wrong results. compiled_exists lets callers
     refuse instead.
     """
-    manifest = json.loads((target_dir / "manifest.json").read_text(encoding="utf-8"))
-    compiled_dir = target_dir / "compiled"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     result = {}
     for node in manifest["nodes"].values():
         if node.get("resource_type") != "model":
