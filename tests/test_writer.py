@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codepbi import Field, Filter, Position, Report, column_width
+from codepbi import Field, Filter, Position, Report, column_width, drillthrough_binding, visual_interaction
 
 
 class TestWriteReport(unittest.TestCase):
@@ -250,6 +250,37 @@ class TestWriteReport(unittest.TestCase):
             entry = visual_json["visual"]["objects"]["columnWidth"][0]
             self.assertEqual(entry["selector"]["metadata"], "Projects.Program Name")
             self.assertEqual(entry["properties"]["value"]["expr"]["Literal"]["Value"], "350D")
+
+    def test_drillthrough_page_sets_type_and_binding(self):
+        report = Report(name="Drillthrough Report", semantic_model_path="../Sample.SemanticModel")
+        detail_page = report.add_page("Detail")
+        project_title = Field("Projects", "Project Title")
+        detail_page.page_type = "Drillthrough"
+        detail_page.page_binding = drillthrough_binding([project_title])
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            page_json = json.loads((report_dir / "definition" / "pages" / detail_page.name / "page.json").read_text())
+            self.assertEqual(page_json["type"], "Drillthrough")
+            self.assertEqual(page_json["pageBinding"]["type"], "Drillthrough")
+            param = page_json["pageBinding"]["parameters"][0]
+            self.assertEqual(param["name"], "Projects.Project Title")
+            self.assertIn("Column", param["fieldExpr"])
+
+    def test_visual_interaction_overrides_source_and_target(self):
+        report = Report(name="Interactions Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        slicer = page.add_slicer(Field("Projects", "Project Title"), Position(x=0, y=0, width=200, height=200))
+        table = page.add_table(
+            [Field("Projects", "Project Title")], Position(x=220, y=0, width=400, height=200),
+        )
+        page.visual_interactions.append(visual_interaction(slicer, table, "NoFilter"))
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            page_json = json.loads((report_dir / "definition" / "pages" / page.name / "page.json").read_text())
+            interaction = page_json["visualInteractions"][0]
+            self.assertEqual(interaction["source"], slicer.name)
+            self.assertEqual(interaction["target"], table.name)
+            self.assertEqual(interaction["type"], "NoFilter")
 
 
 if __name__ == "__main__":

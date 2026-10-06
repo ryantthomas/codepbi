@@ -13,6 +13,51 @@ SINGLE_ROLE_KEY = {
 }
 
 
+def field_ref(entity: str, property_: str, is_measure: bool = False) -> dict:
+    """The {"Column": {...}} / {"Measure": {...}} expression wrapper every field reference
+    uses -- shared by projections, filters, and drillthrough page bindings."""
+    wrapper = "Measure" if is_measure else "Column"
+    return {
+        wrapper: {
+            "Expression": {"SourceRef": {"Entity": entity}},
+            "Property": property_,
+        }
+    }
+
+
+def drillthrough_binding(fields: list[Field], name: str = "drillthrough") -> dict:
+    """pageBinding for a page with page_type="Drillthrough". One BindingParameter per field
+    that should trigger/filter the drillthrough page. Structure confirmed against the
+    published page/2.1.0 JSON Schema (pageBinding/BindingParameter definitions), not inferred
+    from an example.
+
+    Usage: page.page_type = "Drillthrough"; page.page_binding = drillthrough_binding([field])
+    """
+    return {
+        "name": name,
+        "type": "Drillthrough",
+        "parameters": [
+            {"name": f.query_ref, "fieldExpr": field_ref(f.entity, f.property, f.is_measure)}
+            for f in fields
+        ],
+    }
+
+
+INTERACTION_TYPES = {"Default", "DataFilter", "HighlightFilter", "NoFilter"}
+
+
+def visual_interaction(source: Visual, target: Visual, interaction_type: str) -> dict:
+    """A page.visual_interactions entry overriding how selecting a data point on `source`
+    affects `target`. interaction_type is one of INTERACTION_TYPES. Structure confirmed
+    against the published page/2.1.0 JSON Schema (VisualInteraction definition).
+
+    Usage: page.visual_interactions.append(visual_interaction(chart_a, chart_b, "NoFilter"))
+    """
+    if interaction_type not in INTERACTION_TYPES:
+        raise ValueError(f"interaction_type must be one of {sorted(INTERACTION_TYPES)}")
+    return {"source": source.name, "target": target.name, "type": interaction_type}
+
+
 def column_width(query_ref: str, pixels: float) -> dict:
     """An `objects.columnWidth` entry for a table/matrix column, keyed by the column's
     queryRef (e.g. "Organizations.Organization Name" -- the same string Field.query_ref
@@ -111,6 +156,12 @@ class Page:
     width: float = 1280
     display_option: str = "FitToPage"
     visuals: list[Visual] = field(default_factory=list)
+    # "Drillthrough" or "Tooltip"; pairs with page_binding. None = a normal page.
+    page_type: str | None = None
+    page_binding: dict | None = None
+    # Overrides for how selecting a data point on one visual affects another -- see
+    # visual_interaction(). Default (no entry) leaves Desktop's own inferred behavior.
+    visual_interactions: list[dict] = field(default_factory=list)
 
     def add_visual(
         self,

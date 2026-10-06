@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from .ids import guid
-from .model import Filter, Page, Report, Visual
+from .model import Filter, Page, Report, Visual, field_ref
 
 PBIP_SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.0.0/schema.json"
 PLATFORM_SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json"
@@ -21,19 +21,9 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def _field_ref(entity: str, property_: str, is_measure: bool = False) -> dict:
-    wrapper = "Measure" if is_measure else "Column"
-    return {
-        wrapper: {
-            "Expression": {"SourceRef": {"Entity": entity}},
-            "Property": property_,
-        }
-    }
-
-
 def _projection(f) -> dict:
     return {
-        "field": _field_ref(f.entity, f.property, f.is_measure),
+        "field": field_ref(f.entity, f.property, f.is_measure),
         "queryRef": f.query_ref,
         "nativeQueryRef": f.native_query_ref,
     }
@@ -42,7 +32,7 @@ def _projection(f) -> dict:
 def _filter_json(filt: Filter) -> dict:
     base = {
         "name": filt.name,
-        "field": _field_ref(filt.entity, filt.property),
+        "field": field_ref(filt.entity, filt.property),
         "type": filt.kind,
     }
     if filt.kind == "Advanced" and filt.value is not None:
@@ -104,7 +94,7 @@ def _visual_json(visual: Visual) -> dict:
 
 
 def _page_json(page: Page) -> dict:
-    return {
+    data = {
         "$schema": PAGE_SCHEMA,
         "name": page.name,
         "displayName": page.display_name,
@@ -112,6 +102,13 @@ def _page_json(page: Page) -> dict:
         "height": page.height,
         "width": page.width,
     }
+    if page.page_type:
+        data["type"] = page.page_type
+    if page.page_binding:
+        data["pageBinding"] = page.page_binding
+    if page.visual_interactions:
+        data["visualInteractions"] = page.visual_interactions
+    return data
 
 
 def write_report(report: Report, parent_dir: str) -> str:
