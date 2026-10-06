@@ -146,6 +146,9 @@ def write_report(report: Report, parent_dir: str) -> str:
         report_dir / "definition" / "report.json",
         {
             "$schema": REPORT_SCHEMA,
+            # Required by the schema -- an empty object is valid (baseTheme/customTheme
+            # are both optional sub-fields), and Desktop applies its own default theme.
+            "themeCollection": {},
             "settings": {
                 "useStylableVisualContainerHeader": True,
                 "exportDataMode": "AllowSummarized",
