@@ -44,3 +44,23 @@ instead of assuming `"Column"` always.
 
 **Found:** 2026-10-06, `codepbi` v0.1.2 (unreleased), cross-checking real `card`/`pivotTable`
 examples before building chart-type support.
+
+---
+
+## Confirmed working in Desktop (Tier 1)
+
+The following visual types/role names were generated with no real prior example to copy from
+(best-effort from general PBI convention) and have now been opened in Desktop and confirmed to
+render correctly — logging this so "confirmed" doesn't quietly become "assumed" over time:
+
+| visualType | roles |
+|---|---|
+| `card` | `Values` |
+| `multiRowCard` | `Values` |
+| `pivotTable` (Matrix) | `Rows`, `Values` (no `Columns` tested yet) |
+| `clusteredBarChart` | `Category`, `Y` |
+| `lineChart` | `Category`, `Y` |
+| `lineClusteredColumnComboChart` | `Category`, `Y`, `Y2` |
+
+**Confirmed:** 2026-10-06, `codepbi` v0.1.3, against the NFWF Payments test report's
+"CodePBI Test - Tier 1" page.
