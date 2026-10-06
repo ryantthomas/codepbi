@@ -284,6 +284,43 @@ class TestWriteReport(unittest.TestCase):
             self.assertEqual(interaction["target"], table.name)
             self.assertEqual(interaction["type"], "NoFilter")
 
+    def test_custom_theme_sets_theme_collection_and_resource_package(self):
+        report = Report(
+            name="Themed Report",
+            semantic_model_path="../Sample.SemanticModel",
+            theme={"name": "Brand", "dataColors": ["#005493", "#bfe7f7"]},
+        )
+        report.add_page("Overview")
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            report_json = json.loads((report_dir / "definition" / "report.json").read_text())
+            self.assertEqual(report_json["themeCollection"]["customTheme"]["name"], "Brand")
+            self.assertEqual(report_json["themeCollection"]["customTheme"]["type"], "RegisteredResources")
+            package = report_json["resourcePackages"][0]
+            self.assertEqual(package["items"][0]["path"], "RegisteredResources/Brand.json")
+            self.assertEqual(package["items"][0]["type"], "CustomTheme")
+
+            theme_file = report_dir / "StaticResources" / "RegisteredResources" / "Brand.json"
+            theme_json = json.loads(theme_file.read_text())
+            self.assertEqual(theme_json["dataColors"], ["#005493", "#bfe7f7"])
+
+    def test_no_theme_leaves_theme_collection_empty(self):
+        report = self.build_sample_report()
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            report_json = json.loads((report_dir / "definition" / "report.json").read_text())
+            self.assertEqual(report_json["themeCollection"], {})
+            self.assertNotIn("resourcePackages", report_json)
+
+    def test_page_objects_passthrough_for_background(self):
+        report = Report(name="Background Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        page.objects = {"background": [{"properties": {"color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#FFFFFF'"}}}}}}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            page_json = json.loads((report_dir / "definition" / "pages" / page.name / "page.json").read_text())
+            self.assertIn("background", page_json["objects"])
+
 
 if __name__ == "__main__":
     unittest.main()

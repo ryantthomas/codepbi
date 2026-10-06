@@ -108,6 +108,42 @@ def _page_json(page: Page) -> dict:
         data["pageBinding"] = page.page_binding
     if page.visual_interactions:
         data["visualInteractions"] = page.visual_interactions
+    if page.objects:
+        data["objects"] = page.objects
+    return data
+
+
+def _report_json(report: Report) -> dict:
+    theme_collection = {}
+    resource_packages = []
+    if report.theme:
+        theme_name = report.theme["name"]
+        theme_collection["customTheme"] = {
+            "name": theme_name,
+            "reportVersionAtImport": {"visual": "1.0.0", "page": "1.0.0", "report": "1.0.0"},
+            "type": "RegisteredResources",
+        }
+        resource_packages.append({
+            "name": "RegisteredResources",
+            "type": "RegisteredResources",
+            "items": [{"name": theme_name, "path": f"RegisteredResources/{theme_name}.json", "type": "CustomTheme"}],
+        })
+    data = {
+        "$schema": REPORT_SCHEMA,
+        # Required by the schema -- an empty object is valid (baseTheme/customTheme
+        # are both optional sub-fields), and Desktop applies its own default theme.
+        "themeCollection": theme_collection,
+        "settings": {
+            "useStylableVisualContainerHeader": True,
+            "exportDataMode": "AllowSummarized",
+            "defaultDrillFilterOtherVisuals": True,
+            "allowChangeFilterTypes": True,
+            "useEnhancedTooltips": True,
+            "useDefaultAggregateDisplayName": True,
+        },
+    }
+    if resource_packages:
+        data["resourcePackages"] = resource_packages
     return data
 
 
@@ -145,23 +181,13 @@ def write_report(report: Report, parent_dir: str) -> str:
         },
     )
 
-    _write_json(
-        report_dir / "definition" / "report.json",
-        {
-            "$schema": REPORT_SCHEMA,
-            # Required by the schema -- an empty object is valid (baseTheme/customTheme
-            # are both optional sub-fields), and Desktop applies its own default theme.
-            "themeCollection": {},
-            "settings": {
-                "useStylableVisualContainerHeader": True,
-                "exportDataMode": "AllowSummarized",
-                "defaultDrillFilterOtherVisuals": True,
-                "allowChangeFilterTypes": True,
-                "useEnhancedTooltips": True,
-                "useDefaultAggregateDisplayName": True,
-            },
-        },
-    )
+    _write_json(report_dir / "definition" / "report.json", _report_json(report))
+
+    if report.theme:
+        _write_json(
+            report_dir / "StaticResources" / "RegisteredResources" / f"{report.theme['name']}.json",
+            report.theme,
+        )
 
     _write_json(
         report_dir / "definition" / "version.json",

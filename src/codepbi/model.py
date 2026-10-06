@@ -165,6 +165,10 @@ class Page:
     # Overrides for how selecting a data point on one visual affects another -- see
     # visual_interaction(). Default (no entry) leaves Desktop's own inferred behavior.
     visual_interactions: list[dict] = field(default_factory=list)
+    # Page-level formatting passthrough, e.g. {"background": [{"properties": {...}}]} --
+    # confirmed property names (pageInformation, pageSize, background, displayArea, outspace,
+    # outspacePane, filterCard, pageRefresh, personalizeVisual) via the published page schema.
+    objects: dict = field(default_factory=dict)
 
     def add_visual(
         self,
@@ -301,6 +305,12 @@ class Report:
     semantic_model_path: str
     pages: list[Page] = field(default_factory=list)
     active_page_name: str | None = None
+    # A custom color theme -- Microsoft's public Report Theme JSON format
+    # (https://learn.microsoft.com/power-bi/create-reports/desktop-report-themes), e.g.
+    # {"name": "Brand", "dataColors": ["#005493", "#008fb4", ...]}. None = Desktop's default
+    # theme (still valid -- themeCollection is required but can be empty, see
+    # docs/codepbi-lessons-learned.md in the consuming project).
+    theme: dict | None = None
 
     def add_page(self, display_name: str, **kwargs) -> Page:
         page = Page(display_name=display_name, **kwargs)
