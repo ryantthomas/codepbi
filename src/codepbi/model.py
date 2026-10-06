@@ -5,8 +5,11 @@ from dataclasses import dataclass, field
 from .ids import hex_id
 
 # Single-role visuals: visualType -> the one query role every projected field goes under.
+# slicer was wrongly "Field" in earlier versions -- confirmed "Values" (like everything else
+# here) via a real Desktop-saved slicer. See docs/codepbi-lessons-learned.md in the project
+# that found this.
 SINGLE_ROLE_KEY = {
-    "slicer": "Field",
+    "slicer": "Values",
     "tableEx": "Values",
     "card": "Values",
     "multiRowCard": "Values",

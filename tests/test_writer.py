@@ -65,7 +65,9 @@ class TestWriteReport(unittest.TestCase):
             self.assertEqual(projections[0]["queryRef"], "Projects.Project Title")
             self.assertEqual(visual_json["filterConfig"]["filters"][0]["filter"]["Where"][0]["Condition"]["Comparison"]["Right"]["Literal"]["Value"], "'Active'")
 
-    def test_slicer_uses_field_role_key(self):
+    def test_slicer_uses_values_role_key(self):
+        # NOT "Field" -- see docs/codepbi-lessons-learned.md in the consuming project for how
+        # that wrong assumption was caught (a slicer manually fixed in Desktop and diffed).
         report = self.build_sample_report()
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(report.save(tmp))
@@ -74,7 +76,7 @@ class TestWriteReport(unittest.TestCase):
             visual_json = json.loads(
                 (report_dir / "definition" / "pages" / page.name / "visuals" / slicer_visual.name / "visual.json").read_text()
             )
-            self.assertIn("Field", visual_json["visual"]["query"]["queryState"])
+            self.assertIn("Values", visual_json["visual"]["query"]["queryState"])
 
     def _visual_json(self, report, report_dir, page, visual):
         path = report_dir / "definition" / "pages" / page.name / "visuals" / visual.name / "visual.json"
