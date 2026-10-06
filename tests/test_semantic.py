@@ -47,6 +47,18 @@ class TestSchemaLoader(unittest.TestCase):
         self.assertEqual(pbi_table_of({"entity": "Orders"}), "Orders")
         self.assertIsNone(pbi_table_of({}))
 
+    def test_extra_meta_passthrough_uses_default_when_undeclared(self):
+        config = TmdlProjectConfig(
+            dbt_project_dir=FIXTURE_DIR,
+            semantic_model_definition_dir=Path("."),
+            tom_lib_dir=Path("unused-for-these-tests"),
+            extra_column_meta={"owner": "unassigned"},
+            extra_table_meta={"layer": "core"},
+        )
+        schema = schema_loader.load_schema(config)
+        self.assertEqual(schema["Orders"]["layer"], "core")
+        self.assertTrue(all(c["owner"] == "unassigned" for c in schema["Orders"]["columns"]))
+
     def test_iter_semantic_models_resolves_table_names(self):
         config = make_config(Path("."))
         found = {table_name: sm for _p, _d, sm, table_name in schema_loader.iter_semantic_models(config)}

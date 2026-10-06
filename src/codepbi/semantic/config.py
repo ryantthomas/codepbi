@@ -21,6 +21,12 @@ class TmdlProjectConfig:
         DAX-measure authority.
     skip_tables: TMDL table names to ignore entirely (e.g. a reference/glossary table with
         no backing dbt model).
+    extra_column_meta: additional `meta.*` keys to pass through verbatim on each column dict
+        (key -> default value used when a column doesn't declare it), for callers that track
+        extra per-column metadata (e.g. data-governance fields) beyond what TMDL sync needs.
+        Unused by anything in this package; purely a passthrough so callers don't have to
+        re-parse schema YAML themselves just to read one more field.
+    extra_table_meta: same idea as extra_column_meta, but for per-table `meta.*` keys.
     """
 
     dbt_project_dir: Path
@@ -29,6 +35,8 @@ class TmdlProjectConfig:
     models_glob: str = "models/**/*.yml"
     semantic_models_subdir: str = "models/semantic_models"
     skip_tables: set[str] = field(default_factory=set)
+    extra_column_meta: dict[str, str] = field(default_factory=dict)
+    extra_table_meta: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.dbt_project_dir = Path(self.dbt_project_dir)

@@ -88,7 +88,7 @@ def load_schema(config: TmdlProjectConfig) -> dict:
         cols = []
         for col in model.get("columns", []):
             cm = col.get("meta", {}) or {}
-            cols.append({
+            colinfo = {
                 "source": col["name"],
                 "display": cm.get("display_name", col["name"]),
                 "desc": col.get("description", ""),
@@ -99,8 +99,11 @@ def load_schema(config: TmdlProjectConfig) -> dict:
                 # is what makes a money column survive a table rebuild.
                 "format_string": cm.get("format_string"),
                 "summarize_by": cm.get("summarize_by"),
-            })
-        out[pbi_table] = {
+            }
+            for key, default in config.extra_column_meta.items():
+                colinfo[key] = cm.get(key, default)
+            cols.append(colinfo)
+        table_info = {
             "entity": meta.get("entity", ""),
             "grain": meta.get("grain", ""),
             # The dbt model name, so generators can emit ref() without reading the
@@ -108,6 +111,9 @@ def load_schema(config: TmdlProjectConfig) -> dict:
             "model": model["name"],
             "columns": cols,
         }
+        for key, default in config.extra_table_meta.items():
+            table_info[key] = meta.get(key, default)
+        out[pbi_table] = table_info
     return out
 
 
