@@ -169,6 +169,9 @@ class Page:
     # confirmed property names (pageInformation, pageSize, background, displayArea, outspace,
     # outspacePane, filterCard, pageRefresh, personalizeVisual) via the published page schema.
     objects: dict = field(default_factory=dict)
+    # Page-level filters, applied on top of visual-level filters and under report-level ones.
+    # Same FilterContainer shape as Visual.filters (confirmed via filterConfiguration schema).
+    filters: list[Filter] = field(default_factory=list)
 
     def add_visual(
         self,
@@ -311,6 +314,10 @@ class Report:
     # theme (still valid -- themeCollection is required but can be empty, see
     # docs/codepbi-lessons-learned.md in the consuming project).
     theme: dict | None = None
+    # Report-level filters, applied on top of page- and visual-level filters. Same
+    # FilterContainer shape as Visual/Page filters -- confirmed via the filterConfiguration
+    # schema (report.json's top-level "filterConfig" property).
+    filters: list[Filter] = field(default_factory=list)
 
     def add_page(self, display_name: str, **kwargs) -> Page:
         page = Page(display_name=display_name, **kwargs)

@@ -321,6 +321,27 @@ class TestWriteReport(unittest.TestCase):
             page_json = json.loads((report_dir / "definition" / "pages" / page.name / "page.json").read_text())
             self.assertIn("background", page_json["objects"])
 
+    def test_page_level_filter_emits_filter_config(self):
+        report = Report(name="Page Filter Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        page.filters.append(Filter.equals("Orders", "Status", "Active"))
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            page_json = json.loads((report_dir / "definition" / "pages" / page.name / "page.json").read_text())
+            self.assertEqual(
+                page_json["filterConfig"]["filters"][0]["filter"]["Where"][0]["Condition"]["Comparison"]["Right"]["Literal"]["Value"],
+                "'Active'",
+            )
+
+    def test_report_level_filter_emits_filter_config(self):
+        report = Report(name="Report Filter Report", semantic_model_path="../Sample.SemanticModel")
+        report.filters.append(Filter.categorical("Orders", "Region"))
+        report.add_page("Overview")
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            report_json = json.loads((report_dir / "definition" / "report.json").read_text())
+            self.assertEqual(report_json["filterConfig"]["filters"][0]["field"]["Column"]["Property"], "Region")
+
 
 if __name__ == "__main__":
     unittest.main()

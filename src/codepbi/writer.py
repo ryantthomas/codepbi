@@ -110,6 +110,8 @@ def _page_json(page: Page) -> dict:
         data["visualInteractions"] = page.visual_interactions
     if page.objects:
         data["objects"] = page.objects
+    if page.filters:
+        data["filterConfig"] = {"filters": [_filter_json(f) for f in page.filters]}
     return data
 
 
@@ -144,6 +146,8 @@ def _report_json(report: Report) -> dict:
     }
     if resource_packages:
         data["resourcePackages"] = resource_packages
+    if report.filters:
+        data["filterConfig"] = {"filters": [_filter_json(f) for f in report.filters]}
     return data
 
 
