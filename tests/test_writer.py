@@ -342,6 +342,22 @@ class TestWriteReport(unittest.TestCase):
             report_json = json.loads((report_dir / "definition" / "report.json").read_text())
             self.assertEqual(report_json["filterConfig"]["filters"][0]["field"]["Column"]["Property"], "Region")
 
+    def test_visual_group_container_and_member(self):
+        report = Report(name="Group Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        group = page.add_group("KPIs", Position(x=0, y=0, width=400, height=200))
+        card = page.add_card(Field("Orders", "Total Sales", is_measure=True), Position(x=20, y=20, width=200, height=100))
+        card.parent_group_name = group.name
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            group_json = self._visual_json(report, report_dir, page, group)
+            self.assertEqual(group_json["visualGroup"]["displayName"], "KPIs")
+            self.assertEqual(group_json["visualGroup"]["groupMode"], "ScaleMode")
+            self.assertNotIn("visual", group_json)
+
+            card_json = self._visual_json(report, report_dir, page, card)
+            self.assertEqual(card_json["parentGroupName"], group.name)
+
 
 if __name__ == "__main__":
     unittest.main()

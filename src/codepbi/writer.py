@@ -62,19 +62,6 @@ def _filter_json(filt: Filter) -> dict:
 
 def _visual_json(visual: Visual) -> dict:
     pos = visual.position
-    query_state = {
-        role: {"projections": [_projection(f) for f in fields]}
-        for role, fields in visual.roles.items()
-    }
-    visual_body = {
-        "visualType": visual.visual_type,
-        "query": {"queryState": query_state},
-        "drillFilterOtherVisuals": visual.drill_filter_other_visuals,
-    }
-    if visual.objects:
-        visual_body["objects"] = visual.objects
-    if visual.visual_container_objects:
-        visual_body["visualContainerObjects"] = visual.visual_container_objects
     data = {
         "$schema": VISUAL_SCHEMA,
         "name": visual.name,
@@ -86,8 +73,29 @@ def _visual_json(visual: Visual) -> dict:
             "width": pos.width,
             "tabOrder": pos.tab_order,
         },
-        "visual": visual_body,
     }
+    if visual.visual_group is not None:
+        group_body = dict(visual.visual_group)
+        if visual.objects:
+            group_body["objects"] = visual.objects
+        data["visualGroup"] = group_body
+    else:
+        query_state = {
+            role: {"projections": [_projection(f) for f in fields]}
+            for role, fields in visual.roles.items()
+        }
+        visual_body = {
+            "visualType": visual.visual_type,
+            "query": {"queryState": query_state},
+            "drillFilterOtherVisuals": visual.drill_filter_other_visuals,
+        }
+        if visual.objects:
+            visual_body["objects"] = visual.objects
+        if visual.visual_container_objects:
+            visual_body["visualContainerObjects"] = visual.visual_container_objects
+        data["visual"] = visual_body
+    if visual.parent_group_name:
+        data["parentGroupName"] = visual.parent_group_name
     if visual.filters:
         data["filterConfig"] = {"filters": [_filter_json(f) for f in visual.filters]}
     return data

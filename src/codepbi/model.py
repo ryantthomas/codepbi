@@ -149,6 +149,11 @@ class Visual:
     drill_filter_other_visuals: bool = True
     objects: dict = field(default_factory=dict)
     visual_container_objects: dict = field(default_factory=dict)
+    # If set, this container IS a group (visual_type/roles are ignored) -- confirmed via the
+    # visualContainer schema: {"displayName": str, "groupMode": "ScaleMode" | "ScrollMode"}.
+    visual_group: dict | None = None
+    # Name of the group Visual this one belongs to, if any.
+    parent_group_name: str | None = None
 
 
 @dataclass
@@ -188,6 +193,16 @@ class Page:
         )
         self.visuals.append(visual)
         return visual
+
+    def add_group(self, display_name: str, position: Position, group_mode: str = "ScaleMode") -> Visual:
+        """A grouping container -- add visuals normally, then set their `.parent_group_name`
+        to this group's `.name` to make them members."""
+        group = Visual(
+            visual_type="", roles={}, position=position,
+            visual_group={"displayName": display_name, "groupMode": group_mode},
+        )
+        self.visuals.append(group)
+        return group
 
     def _add_single_role(self, visual_type: str, fields: list[Field], position: Position,
                           filters: list[Filter] | None = None) -> Visual:
