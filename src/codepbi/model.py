@@ -71,11 +71,10 @@ class Filter:
 class Visual:
     """roles maps a visual-type-specific query role name (e.g. "Category", "Y", "Series" for a
     chart; "Values" for a table/card; "Field" for a slicer) to the fields projected onto it.
-    Role names are NOT uniform across visual types -- see LESSONS_LEARNED.md.
+    Role names are NOT uniform across visual types.
 
     objects / visual_container_objects are passed straight through to the visual's own JSON
-    (per-visual-type formatting and title/background/border respectively) -- see
-    LESSONS_LEARNED.md for confirmed shapes pulled from real Desktop-saved reports."""
+    (per-visual-type formatting and title/background/border respectively)."""
 
     visual_type: str
     roles: dict[str, list[Field]]

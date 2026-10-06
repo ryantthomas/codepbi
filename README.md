@@ -50,11 +50,6 @@ pip install -e .           # report/visual builder only
 pip install -e ".[semantic]"  # + the dbt-to-TMDL sync module
 ```
 
-## Lessons learned
-
-PBIR/TMDL quirks found by generating reports and actually opening them in Power BI
-Desktop -- see [LESSONS_LEARNED.md](LESSONS_LEARNED.md).
-
 ## License
 
 MIT

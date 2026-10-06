@@ -43,8 +43,8 @@ class TestWriteReport(unittest.TestCase):
             self.assertEqual(pbir["datasetReference"]["byPath"]["path"], "../Sample.SemanticModel")
 
     def test_report_json_has_required_theme_collection(self):
-        # See LESSONS_LEARNED.md -- the schema requires themeCollection, even empty;
-        # Desktop fails to open a report that omits it.
+        # The schema requires themeCollection, even empty; Desktop fails to open a report
+        # that omits it.
         report = self.build_sample_report()
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(report.save(tmp))
