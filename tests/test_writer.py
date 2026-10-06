@@ -297,7 +297,7 @@ class TestWriteReport(unittest.TestCase):
             self.assertEqual(report_json["themeCollection"]["customTheme"]["name"], "Brand")
             self.assertEqual(report_json["themeCollection"]["customTheme"]["type"], "RegisteredResources")
             package = report_json["resourcePackages"][0]
-            self.assertEqual(package["items"][0]["path"], "RegisteredResources/Brand.json")
+            self.assertEqual(package["items"][0]["path"], "Brand")
             self.assertEqual(package["items"][0]["type"], "CustomTheme")
 
             theme_file = report_dir / "StaticResources" / "RegisteredResources" / "Brand.json"
@@ -357,6 +357,65 @@ class TestWriteReport(unittest.TestCase):
 
             card_json = self._visual_json(report, report_dir, page, card)
             self.assertEqual(card_json["parentGroupName"], group.name)
+
+    def test_text_box_has_no_query_and_plain_string_value(self):
+        report = Report(name="Textbox Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        box = page.add_text_box("Sample Title", Position(x=0, y=0, width=300, height=80), font_size="28pt")
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, box)
+            self.assertNotIn("query", visual_json["visual"])
+            run = visual_json["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]
+            self.assertEqual(run["value"], "Sample Title")
+            self.assertEqual(run["textStyle"]["fontSize"], "28pt")
+
+    def test_image_resource_bundled_and_referenced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            logo_path = Path(tmp) / "logo.png"
+            logo_path.write_bytes(b"fake-png-bytes")
+
+            report = Report(name="Image Report", semantic_model_path="../Sample.SemanticModel")
+            report.add_image_resource("logo.png", str(logo_path))
+            page = report.add_page("Overview")
+            image_visual = page.add_image("logo.png", Position(x=0, y=0, width=200, height=100))
+
+            out_dir = Path(tmp) / "out"
+            report_dir = Path(report.save(str(out_dir)))
+
+            bundled = report_dir / "StaticResources" / "RegisteredResources" / "logo.png"
+            self.assertEqual(bundled.read_bytes(), b"fake-png-bytes")
+
+            report_json = json.loads((report_dir / "definition" / "report.json").read_text())
+            item = report_json["resourcePackages"][0]["items"][0]
+            self.assertEqual(item, {"name": "logo.png", "path": "logo.png", "type": "Image"})
+
+            visual_json = self._visual_json(report, report_dir, page, image_visual)
+            self.assertNotIn("query", visual_json["visual"])
+            ref = visual_json["visual"]["objects"]["image"][0]["properties"]["sourceFile"]["image"]["url"]["expr"]["ResourcePackageItem"]
+            self.assertEqual(ref["ItemName"], "logo.png")
+            self.assertEqual(ref["PackageName"], "RegisteredResources")
+
+    def test_theme_and_image_share_one_resource_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            logo_path = Path(tmp) / "logo.png"
+            logo_path.write_bytes(b"x")
+            report = Report(
+                name="Combined Report", semantic_model_path="../Sample.SemanticModel",
+                theme={"name": "Brand", "dataColors": ["#005493"]},
+            )
+            report.add_image_resource("logo.png", str(logo_path))
+            report.add_page("Overview")
+            out_dir = Path(tmp) / "out"
+            report_dir = Path(report.save(str(out_dir)))
+            report_json = json.loads((report_dir / "definition" / "report.json").read_text())
+            self.assertEqual(len(report_json["resourcePackages"]), 1)
+            names = {item["name"] for item in report_json["resourcePackages"][0]["items"]}
+            self.assertEqual(names, {"Brand", "logo.png"})
+            # Theme resourcePackage path is just the bare name -- Desktop normalized our
+            # original folder+extension guess down to this.
+            theme_item = next(i for i in report_json["resourcePackages"][0]["items"] if i["type"] == "CustomTheme")
+            self.assertEqual(theme_item["path"], "Brand")
 
 
 if __name__ == "__main__":

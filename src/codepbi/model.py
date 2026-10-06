@@ -61,6 +61,10 @@ def visual_interaction(source: Visual, target: Visual, interaction_type: str) ->
     return {"source": source.name, "target": target.name, "type": interaction_type}
 
 
+def _literal(value: str) -> dict:
+    return {"expr": {"Literal": {"Value": value}}}
+
+
 def column_width(query_ref: str, pixels: float) -> dict:
     """An `objects.columnWidth` entry for a table/matrix column, keyed by the column's
     queryRef (e.g. "Organizations.Organization Name" -- the same string Field.query_ref
@@ -204,6 +208,47 @@ class Page:
         self.visuals.append(group)
         return group
 
+    def add_text_box(self, text: str, position: Position, font_size: str | None = None) -> Visual:
+        """A static text box -- confirmed shape from a real Desktop-saved textbox. No query
+        roles; content lives entirely in objects.general.paragraphs. Note the text `value` is
+        a plain string here, NOT the usual Literal/expr wrapper every other property uses."""
+        text_run = {"value": text}
+        if font_size:
+            text_run["textStyle"] = {"fontSize": font_size}
+        objects = {"general": [{"properties": {"paragraphs": [{"textRuns": [text_run]}]}}]}
+        return self.add_visual("textbox", {}, position, objects=objects)
+
+    def add_image(
+        self, resource_name: str, position: Position,
+        display_name: str | None = None, scaling: str = "Normal",
+    ) -> Visual:
+        """A static image, referencing a resource already registered via
+        Report.add_image_resource(resource_name, local_file_path). Confirmed shape from a real
+        Desktop-saved image visual (logo). No query roles."""
+        objects = {
+            "image": [{
+                "properties": {
+                    "sourceType": _literal("'image'"),
+                    "sourceFile": {
+                        "image": {
+                            "name": _literal(f"'{display_name or resource_name}'"),
+                            "url": {
+                                "expr": {
+                                    "ResourcePackageItem": {
+                                        "PackageName": "RegisteredResources",
+                                        "PackageType": 1,
+                                        "ItemName": resource_name,
+                                    }
+                                }
+                            },
+                            "scaling": _literal(f"'{scaling}'"),
+                        }
+                    },
+                }
+            }]
+        }
+        return self.add_visual("image", {}, position, objects=objects)
+
     def _add_single_role(self, visual_type: str, fields: list[Field], position: Position,
                           filters: list[Filter] | None = None) -> Visual:
         return self.add_visual(visual_type, {SINGLE_ROLE_KEY[visual_type]: fields}, position, filters)
@@ -333,6 +378,12 @@ class Report:
     # FilterContainer shape as Visual/Page filters -- confirmed via the filterConfiguration
     # schema (report.json's top-level "filterConfig" property).
     filters: list[Filter] = field(default_factory=list)
+    # (resource_name, local_file_path) pairs bundled into the report's RegisteredResources
+    # package (type "Image") -- reference one from a page via Page.add_image(resource_name, ...).
+    images: list[tuple[str, str]] = field(default_factory=list)
+
+    def add_image_resource(self, name: str, file_path: str) -> None:
+        self.images.append((name, file_path))
 
     def add_page(self, display_name: str, **kwargs) -> Page:
         page = Page(display_name=display_name, **kwargs)

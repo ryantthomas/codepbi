@@ -80,15 +80,18 @@ def _visual_json(visual: Visual) -> dict:
             group_body["objects"] = visual.objects
         data["visualGroup"] = group_body
     else:
-        query_state = {
-            role: {"projections": [_projection(f) for f in fields]}
-            for role, fields in visual.roles.items()
-        }
         visual_body = {
             "visualType": visual.visual_type,
-            "query": {"queryState": query_state},
             "drillFilterOtherVisuals": visual.drill_filter_other_visuals,
         }
+        if visual.roles:
+            # Static visuals (textbox, image) have no query roles at all -- confirmed from
+            # real Desktop-saved examples, not just an empty queryState.
+            query_state = {
+                role: {"projections": [_projection(f) for f in fields]}
+                for role, fields in visual.roles.items()
+            }
+            visual_body["query"] = {"queryState": query_state}
         if visual.objects:
             visual_body["objects"] = visual.objects
         if visual.visual_container_objects:
@@ -125,7 +128,9 @@ def _page_json(page: Page) -> dict:
 
 def _report_json(report: Report) -> dict:
     theme_collection = {}
-    resource_packages = []
+    # Theme + images share ONE "RegisteredResources" package -- confirmed from a real
+    # Desktop-saved report with both a custom theme and a logo image.
+    registered_items = []
     if report.theme:
         theme_name = report.theme["name"]
         theme_collection["customTheme"] = {
@@ -133,11 +138,15 @@ def _report_json(report: Report) -> dict:
             "reportVersionAtImport": {"visual": "1.0.0", "page": "1.0.0", "report": "1.0.0"},
             "type": "RegisteredResources",
         }
-        resource_packages.append({
-            "name": "RegisteredResources",
-            "type": "RegisteredResources",
-            "items": [{"name": theme_name, "path": f"RegisteredResources/{theme_name}.json", "type": "CustomTheme"}],
-        })
+        # path is just the bare theme name -- no folder prefix, no extension. Confirmed:
+        # Desktop normalized our original "RegisteredResources/<name>.json" guess down to this.
+        registered_items.append({"name": theme_name, "path": theme_name, "type": "CustomTheme"})
+    for resource_name, _local_path in report.images:
+        registered_items.append({"name": resource_name, "path": resource_name, "type": "Image"})
+    resource_packages = (
+        [{"name": "RegisteredResources", "type": "RegisteredResources", "items": registered_items}]
+        if registered_items else []
+    )
     data = {
         "$schema": REPORT_SCHEMA,
         # Required by the schema -- an empty object is valid (baseTheme/customTheme
@@ -200,6 +209,11 @@ def write_report(report: Report, parent_dir: str) -> str:
             report_dir / "StaticResources" / "RegisteredResources" / f"{report.theme['name']}.json",
             report.theme,
         )
+
+    for resource_name, local_path in report.images:
+        dest = report_dir / "StaticResources" / "RegisteredResources" / resource_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(Path(local_path).read_bytes())
 
     _write_json(
         report_dir / "definition" / "version.json",
