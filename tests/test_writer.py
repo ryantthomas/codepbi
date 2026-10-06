@@ -124,6 +124,100 @@ class TestWriteReport(unittest.TestCase):
             self.assertIn("Values", query_state)
             self.assertNotIn("Columns", query_state)
 
+    def test_pie_chart_has_category_and_y_roles(self):
+        report = Report(name="Pie Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        chart = page.add_pie_chart(
+            category=Field("Projects", "Program Name"),
+            values=[Field("Orders", "Total Sales", is_measure=True)],
+            position=Position(x=0, y=0, width=300, height=300),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, chart)
+            self.assertEqual(visual_json["visual"]["visualType"], "pieChart")
+            query_state = visual_json["visual"]["query"]["queryState"]
+            self.assertIn("Category", query_state)
+            self.assertIn("Y", query_state)
+
+    def test_donut_chart_uses_donut_visual_type(self):
+        report = Report(name="Donut Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        chart = page.add_pie_chart(
+            category=Field("Projects", "Program Name"),
+            values=[Field("Orders", "Total Sales", is_measure=True)],
+            position=Position(x=0, y=0, width=300, height=300),
+            donut=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, chart)
+            self.assertEqual(visual_json["visual"]["visualType"], "donutChart")
+
+    def test_scatter_chart_has_x_y_roles(self):
+        report = Report(name="Scatter Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        chart = page.add_scatter_chart(
+            x=Field("Orders", "Total Sales", is_measure=True),
+            y=Field("Orders", "Order Count", is_measure=True),
+            position=Position(x=0, y=0, width=300, height=300),
+            details=Field("Projects", "Program Name"),
+            size=Field("Orders", "Total Profit", is_measure=True),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, chart)
+            self.assertEqual(visual_json["visual"]["visualType"], "scatterChart")
+            query_state = visual_json["visual"]["query"]["queryState"]
+            self.assertEqual(set(query_state), {"X", "Y", "Details", "Size"})
+
+    def test_gauge_has_y_role_and_optional_targets(self):
+        report = Report(name="Gauge Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        gauge = page.add_gauge(
+            value=Field("Orders", "Total Sales", is_measure=True),
+            position=Position(x=0, y=0, width=200, height=200),
+            max_value=Field("Orders", "Sales Target", is_measure=True),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, gauge)
+            self.assertEqual(visual_json["visual"]["visualType"], "gauge")
+            query_state = visual_json["visual"]["query"]["queryState"]
+            self.assertEqual(set(query_state), {"Y", "MaxValue"})
+
+    def test_treemap_has_group_and_values_roles(self):
+        report = Report(name="Treemap Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        treemap = page.add_treemap(
+            group=Field("Projects", "Program Name"),
+            values=[Field("Orders", "Total Sales", is_measure=True)],
+            position=Position(x=0, y=0, width=300, height=300),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, treemap)
+            self.assertEqual(visual_json["visual"]["visualType"], "treemap")
+            query_state = visual_json["visual"]["query"]["queryState"]
+            self.assertIn("Group", query_state)
+            self.assertIn("Values", query_state)
+
+    def test_filled_map_has_category_role(self):
+        report = Report(name="Map Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        map_visual = page.add_filled_map(
+            location=Field("Projects", "State"),
+            position=Position(x=0, y=0, width=400, height=300),
+            values=[Field("Orders", "Total Sales", is_measure=True)],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            visual_json = self._visual_json(report, report_dir, page, map_visual)
+            self.assertEqual(visual_json["visual"]["visualType"], "filledMap")
+            query_state = visual_json["visual"]["query"]["queryState"]
+            self.assertIn("Category", query_state)
+            self.assertIn("Values", query_state)
+
     def test_visual_objects_and_container_objects_passthrough(self):
         report = Report(name="Styled Report", semantic_model_path="../Sample.SemanticModel")
         page = report.add_page("Overview")

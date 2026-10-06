@@ -7,6 +7,11 @@ are the source of truth for what's *valid* — this file is for the gap between 
 
 Format: one entry per quirk. **Symptom** → **Cause** → **Fix**.
 
+**Scope rule:** generic PBIR/TMDL/Python findings only — how Power BI's file format behaves, how
+Python/TOM interacts with it. No project names, business terms, or table/column names tied to a
+specific use case or project. If an entry needs a concrete example, use placeholder names
+(`Orders`, `Total Sales`, `Category`) the way the rest of this repo's README/tests already do.
+
 ---
 
 ## `report.json` requires `themeCollection`, even if empty

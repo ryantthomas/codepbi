@@ -173,6 +173,55 @@ class Page:
         roles = {"Category": [category], "Y": column_values, "Y2": line_values}
         return self.add_visual("lineClusteredColumnComboChart", roles, position)
 
+    def add_pie_chart(
+        self, category: Field, values: list[Field], position: Position, donut: bool = False,
+    ) -> Visual:
+        roles = {"Category": [category], "Y": values}
+        return self.add_visual("donutChart" if donut else "pieChart", roles, position)
+
+    def add_scatter_chart(
+        self, x: Field, y: Field, position: Position,
+        details: Field | None = None, size: Field | None = None,
+    ) -> Visual:
+        roles = {"X": [x], "Y": [y]}
+        if details:
+            roles["Details"] = [details]
+        if size:
+            roles["Size"] = [size]
+        return self.add_visual("scatterChart", roles, position)
+
+    def add_gauge(
+        self, value: Field, position: Position,
+        min_value: Field | None = None, max_value: Field | None = None, target_value: Field | None = None,
+    ) -> Visual:
+        roles = {"Y": [value]}
+        if min_value:
+            roles["MinValue"] = [min_value]
+        if max_value:
+            roles["MaxValue"] = [max_value]
+        if target_value:
+            roles["TargetValue"] = [target_value]
+        return self.add_visual("gauge", roles, position)
+
+    def add_treemap(
+        self, group: Field, values: list[Field], position: Position, details: Field | None = None,
+    ) -> Visual:
+        roles = {"Group": [group], "Values": values}
+        if details:
+            roles["Details"] = [details]
+        return self.add_visual("treemap", roles, position)
+
+    def add_filled_map(
+        self, location: Field, position: Position,
+        values: list[Field] | None = None, legend: Field | None = None,
+    ) -> Visual:
+        roles = {"Category": [location]}
+        if values:
+            roles["Values"] = values
+        if legend:
+            roles["Legend"] = [legend]
+        return self.add_visual("filledMap", roles, position)
+
 
 @dataclass
 class Report:
