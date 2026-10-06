@@ -161,7 +161,7 @@ class TestWriteReport(unittest.TestCase):
             x=Field("Orders", "Total Sales", is_measure=True),
             y=Field("Orders", "Order Count", is_measure=True),
             position=Position(x=0, y=0, width=300, height=300),
-            details=Field("Projects", "Program Name"),
+            category=Field("Projects", "Program Name"),
             size=Field("Orders", "Total Profit", is_measure=True),
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -169,7 +169,7 @@ class TestWriteReport(unittest.TestCase):
             visual_json = self._visual_json(report, report_dir, page, chart)
             self.assertEqual(visual_json["visual"]["visualType"], "scatterChart")
             query_state = visual_json["visual"]["query"]["queryState"]
-            self.assertEqual(set(query_state), {"X", "Y", "Details", "Size"})
+            self.assertEqual(set(query_state), {"X", "Y", "Category", "Size"})
 
     def test_gauge_has_y_role_and_optional_targets(self):
         report = Report(name="Gauge Report", semantic_model_path="../Sample.SemanticModel")

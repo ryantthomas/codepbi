@@ -180,11 +180,13 @@ class Page:
 
     def add_scatter_chart(
         self, x: Field, y: Field, position: Position,
-        details: Field | None = None, size: Field | None = None,
+        category: Field | None = None, size: Field | None = None,
     ) -> Visual:
+        # Desktop's UI labels this well "Details", but (like every other chart here) the
+        # underlying role key is "Category" -- see docs/codepbi-lessons-learned.md.
         roles = {"X": [x], "Y": [y]}
-        if details:
-            roles["Details"] = [details]
+        if category:
+            roles["Category"] = [category]
         if size:
             roles["Size"] = [size]
         return self.add_visual("scatterChart", roles, position)
