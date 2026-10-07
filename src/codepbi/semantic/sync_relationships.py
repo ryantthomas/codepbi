@@ -11,6 +11,13 @@
 # Cardinality isn't declared here: every relationship this module creates is
 # Many -> One. If your model needs other cardinalities, extend `sync()` with an
 # explicit cardinality field rather than assuming.
+#
+# inactive (config.meta.inactive on the foreign entity): a relationship whose
+# two tables already connect via a different active path. Analysis Services
+# refuses to save a second *active* path between the same two tables (a real
+# engine-level rejection, not something this module checks) -- inactive lets
+# the join exist for DAX measures to opt into via USERELATIONSHIP, without
+# fighting the existing default path.
 
 import re
 import uuid
@@ -87,16 +94,19 @@ def load(config: TmdlProjectConfig) -> list[dict]:
                 primaries[e["name"]] = (table_name, col_friendly)
             elif e["type"] == "foreign":
                 meta = ((e.get("config") or {}).get("meta")) or {}
-                foreigns.append((e["name"], table_name, col_friendly, bool(meta.get("both_directions"))))
+                foreigns.append((e["name"], table_name, col_friendly,
+                                  bool(meta.get("both_directions")), bool(meta.get("inactive"))))
 
     rels = []
-    for name, from_table, from_col, both_dir in foreigns:
+    for name, from_table, from_col, both_dir, inactive in foreigns:
         if name not in primaries:
             continue  # validate() already flags this
         to_table, to_col = primaries[name]
         row = {"from": from_table, "from_column": from_col, "to": to_table, "to_column": to_col}
         if both_dir:
             row["both_directions"] = True
+        if inactive:
+            row["inactive"] = True
         rels.append(row)
     return rels
 
@@ -125,8 +135,13 @@ def export(config: TmdlProjectConfig):
             "name": name, "type": "primary", "expr": to_col,
         }
         foreign_entity = {"name": name, "type": "foreign", "expr": from_col}
+        fmeta = {}
         if str(r.CrossFilteringBehavior) != "OneDirection":
-            foreign_entity["config"] = {"meta": {"both_directions": True}}
+            fmeta["both_directions"] = True
+        if not r.IsActive:
+            fmeta["inactive"] = True
+        if fmeta:
+            foreign_entity["config"] = {"meta": fmeta}
         entities_by_table.setdefault(from_table, {})[name] = foreign_entity
 
     written = 0
@@ -185,10 +200,17 @@ def sync(config: TmdlProjectConfig):
     for k, spec in wanted.items():
         want_cf = (CrossFilteringBehavior.BothDirections if spec.get("both_directions")
                    else CrossFilteringBehavior.OneDirection)
+        want_active = not spec.get("inactive")
         if k in existing:
             r = existing[k]
+            changed = False
             if r.CrossFilteringBehavior != want_cf:
                 r.CrossFilteringBehavior = want_cf
+                changed = True
+            if r.IsActive != want_active:
+                r.IsActive = want_active
+                changed = True
+            if changed:
                 updated += 1
             continue
 
@@ -202,7 +224,7 @@ def sync(config: TmdlProjectConfig):
         rel.FromCardinality = RelationshipEndCardinality.Many
         rel.ToCardinality = RelationshipEndCardinality.One
         rel.CrossFilteringBehavior = want_cf
-        rel.IsActive = True
+        rel.IsActive = want_active
         model.Relationships.Add(rel)
         added += 1
 
