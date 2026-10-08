@@ -73,18 +73,20 @@ def _filter_json(filt: Filter) -> dict:
     return base
 
 
-def _visual_json(visual: Visual) -> dict:
+def _visual_json(visual: Visual, index: int) -> dict:
     pos = visual.position
+    # Desktop spaces z and tabOrder 1000 apart in insertion order.
+    z = index * 1000 if pos.z is None else pos.z
     data = {
         "$schema": VISUAL_SCHEMA,
         "name": visual.name,
         "position": {
             "x": pos.x,
             "y": pos.y,
-            "z": pos.z,
+            "z": z,
             "height": pos.height,
             "width": pos.width,
-            "tabOrder": pos.tab_order,
+            "tabOrder": z if pos.tab_order is None else pos.tab_order,
         },
     }
     if visual.visual_group is not None:
@@ -114,6 +116,8 @@ def _visual_json(visual: Visual) -> dict:
         data["parentGroupName"] = visual.parent_group_name
     if visual.filters:
         data["filterConfig"] = {"filters": [_filter_json(f) for f in visual.filters]}
+    if visual.is_hidden:
+        data["isHidden"] = True
     return data
 
 
@@ -128,6 +132,8 @@ def _page_json(page: Page) -> dict:
     }
     if page.page_type:
         data["type"] = page.page_type
+    if page.hidden:
+        data["visibility"] = "HiddenInViewMode"
     if page.page_binding:
         data["pageBinding"] = page.page_binding
     if page.visual_interactions:
@@ -245,7 +251,7 @@ def write_report(report: Report, parent_dir: str) -> str:
     for page in report.pages:
         page_dir = report_dir / "definition" / "pages" / page.name
         _write_json(page_dir / "page.json", _page_json(page))
-        for visual in page.visuals:
-            _write_json(page_dir / "visuals" / visual.name / "visual.json", _visual_json(visual))
+        for i, visual in enumerate(page.visuals):
+            _write_json(page_dir / "visuals" / visual.name / "visual.json", _visual_json(visual, i))
 
     return str(report_dir)

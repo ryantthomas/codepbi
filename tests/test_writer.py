@@ -428,6 +428,37 @@ class TestWriteReport(unittest.TestCase):
             theme_item = next(i for i in report_json["resourcePackages"][0]["items"] if i["type"] == "CustomTheme")
             self.assertEqual(theme_item["path"], "Brand")
 
+    def test_z_and_tab_order_follow_insertion_unless_set(self):
+        report = Report(name="Order Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        first = page.add_card(Field("Orders", "A", is_measure=True), Position(0, 0, 100, 100))
+        second = page.add_card(Field("Orders", "B", is_measure=True), Position(0, 0, 100, 100))
+        pinned = page.add_card(
+            Field("Orders", "C", is_measure=True), Position(0, 0, 100, 100, z=5, tab_order=1),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            positions = [self._visual_json(report, report_dir, page, v)["position"]
+                         for v in (first, second, pinned)]
+            self.assertEqual([(p["z"], p["tabOrder"]) for p in positions],
+                             [(0, 0), (1000, 1000), (5, 1)])
+
+    def test_hidden_visual_and_page(self):
+        report = Report(name="Hidden Report", semantic_model_path="../Sample.SemanticModel")
+        page = report.add_page("Overview")
+        page.hidden = True
+        card = page.add_card(Field("Orders", "A", is_measure=True), Position(0, 0, 100, 100))
+        card.is_hidden = True
+        shown = report.add_page("Shown")
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            pages_dir = report_dir / "definition" / "pages"
+            page_json = json.loads((pages_dir / page.name / "page.json").read_text())
+            shown_json = json.loads((pages_dir / shown.name / "page.json").read_text())
+            self.assertEqual(page_json["visibility"], "HiddenInViewMode")
+            self.assertNotIn("visibility", shown_json)
+            self.assertTrue(self._visual_json(report, report_dir, page, card)["isHidden"])
+
 
 class TestFilterLiterals(unittest.TestCase):
     def condition(self, filt):

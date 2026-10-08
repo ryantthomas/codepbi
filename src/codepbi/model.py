@@ -108,12 +108,9 @@ class Position:
     y: float
     width: float
     height: float
-    z: float = 0
+    # None = assigned by insertion order within the page; tab_order then follows z.
+    z: float | None = None
     tab_order: float | None = None
-
-    def __post_init__(self) -> None:
-        if self.tab_order is None:
-            self.tab_order = self.z
 
 
 @dataclass
@@ -165,6 +162,7 @@ class Visual:
     visual_group: dict | None = None
     # Name of the group Visual this one belongs to, if any.
     parent_group_name: str | None = None
+    is_hidden: bool = False
 
 
 @dataclass
@@ -188,6 +186,8 @@ class Page:
     # Page-level filters, applied on top of visual-level filters and under report-level ones.
     # Same FilterContainer shape as Visual.filters (confirmed via filterConfiguration schema).
     filters: list[Filter] = field(default_factory=list)
+    # Hidden from the pages list in View mode ("visibility": "HiddenInViewMode").
+    hidden: bool = False
 
     def add_visual(
         self,
