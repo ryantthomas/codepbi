@@ -108,32 +108,36 @@ class Position:
     y: float
     width: float
     height: float
-    z: float = 0
+    # None = assigned by insertion order within the page; tab_order then follows z.
+    z: float | None = None
     tab_order: float | None = None
-
-    def __post_init__(self) -> None:
-        if self.tab_order is None:
-            self.tab_order = self.z
 
 
 @dataclass
 class Filter:
     """A filter pane entry on a visual. Use `categorical` to just expose a field as filterable,
-    or `equals` to pre-apply a fixed condition (matches what PBI Desktop itself emits)."""
+    `equals` to pre-apply a fixed condition, or `in_` to pre-select a list of values (matches
+    what PBI Desktop itself emits). Values are typed by their Python type: str, int, float,
+    bool, date or datetime."""
 
     entity: str
     property: str
     kind: str  # "Categorical" or "Advanced"
-    value: str | None = None
+    value: object = None
     name: str = field(default_factory=hex_id)
+    values: list | None = None
 
     @staticmethod
     def categorical(entity: str, property: str) -> Filter:
         return Filter(entity, property, kind="Categorical")
 
     @staticmethod
-    def equals(entity: str, property: str, value: str) -> Filter:
+    def equals(entity: str, property: str, value) -> Filter:
         return Filter(entity, property, kind="Advanced", value=value)
+
+    @staticmethod
+    def in_(entity: str, property: str, values: list) -> Filter:
+        return Filter(entity, property, kind="Categorical", values=list(values))
 
 
 @dataclass
@@ -158,6 +162,7 @@ class Visual:
     visual_group: dict | None = None
     # Name of the group Visual this one belongs to, if any.
     parent_group_name: str | None = None
+    is_hidden: bool = False
 
 
 @dataclass
@@ -181,6 +186,8 @@ class Page:
     # Page-level filters, applied on top of visual-level filters and under report-level ones.
     # Same FilterContainer shape as Visual.filters (confirmed via filterConfiguration schema).
     filters: list[Filter] = field(default_factory=list)
+    # Hidden from the pages list in View mode ("visibility": "HiddenInViewMode").
+    hidden: bool = False
 
     def add_visual(
         self,

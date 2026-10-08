@@ -126,54 +126,99 @@ def _key(r):
     return (r["from"], r["from_column"], r["to"], r["to_column"])
 
 
-def export(config: TmdlProjectConfig):
-    """Dump the current TMDL relationships into each table's semantic-model YAML,
-    replacing only its `entities:` block -- dimensions/measures/description untouched.
-    Use this to seed the files the first time, or to recover if TMDL and the YAML
-    ever disagree about what 'current' means."""
-    schema = load_schema(config)
-    table_to_model = {name: spec["model"] for name, spec in schema.items()}
+def _set_flags(entity, both_directions, inactive):
+    config = dict(entity.get("config") or {})
+    meta = {k: v for k, v in (config.get("meta") or {}).items()
+            if k not in ("both_directions", "inactive")}
+    if both_directions:
+        meta["both_directions"] = True
+    if inactive:
+        meta["inactive"] = True
+    config.pop("meta", None)
+    if meta:
+        config["meta"] = meta
+    entity.pop("config", None)
+    if config:
+        entity["config"] = config
 
+
+def export_entities(sms: dict, rels: list[tuple], tables: set[str]) -> int:
+    """Rewrite each in-model table's `entities:` (sms: {table: semantic model dict}, edited in
+    place) to match rels: (from_table, from_source, to_table, to_source, both_directions,
+    inactive), all source column names. Primary entities are kept; a foreign entity is replaced
+    only if its primary sits in this model, so joins another model owns survive. Existing
+    names, descriptions and order are kept. Returns the number of relationships skipped
+    because a table has no semantic-model YAML."""
+    primary_table = {e["name"]: t for t, sm in sms.items()
+                     for e in sm.get("entities") or [] if e["type"] == "primary"}
+    current = {t: list(sm.get("entities") or []) for t, sm in sms.items() if t in tables}
+    foreigns = {t: [] for t in current}
+
+    skipped = 0
+    for from_table, from_src, to_table, to_src, both_directions, inactive in rels:
+        if from_table not in current or to_table not in current:
+            skipped += 1
+            continue
+        primary = next((e for e in current[to_table]
+                        if e["type"] == "primary" and e["expr"] == to_src), None)
+        if primary is None:
+            primary = {"name": _entity_name(to_src), "type": "primary", "expr": to_src}
+            current[to_table].append(primary)
+        foreign = next((dict(e) for e in current[from_table] if e["type"] == "foreign"
+                        and e["expr"] == from_src and e["name"] == primary["name"]),
+                       {"name": primary["name"], "type": "foreign", "expr": from_src})
+        _set_flags(foreign, both_directions, inactive)
+        foreigns[from_table].append(foreign)
+
+    for t, entities in current.items():
+        out = []
+        for e in entities:
+            if e["type"] != "foreign" or primary_table.get(e["name"]) not in tables:
+                out.append(e)
+                continue
+            match = next((f for f in foreigns[t]
+                          if (f["name"], f["expr"]) == (e["name"], e["expr"])), None)
+            if match:
+                foreigns[t].remove(match)
+                out.append(match)
+        out += foreigns[t]
+        if out:
+            sms[t]["entities"] = out
+        else:
+            sms[t].pop("entities", None)
+    return skipped
+
+
+def export(config: TmdlProjectConfig):
+    """Write the current TMDL relationships back into the semantic-model YAML `entities:`
+    blocks of this model's tables -- dimensions/measures/description untouched. Use this to
+    seed the files the first time, or to recover if TMDL and the YAML ever disagree."""
     _, model = tom_utils.load_model(config)
 
-    entities_by_table = {}  # table -> {entity_name: entity dict}
-    for r in model.Relationships:
-        to_table, to_col = r.ToTable.Name, r.ToColumn.Name
-        from_table, from_col = r.FromTable.Name, r.FromColumn.Name
-        name = _entity_name(to_col)
+    def source(col):
+        return getattr(col, "SourceColumn", None) or col.Name
 
-        entities_by_table.setdefault(to_table, {})[name] = {
-            "name": name, "type": "primary", "expr": to_col,
-        }
-        foreign_entity = {"name": name, "type": "foreign", "expr": from_col}
-        fmeta = {}
-        if str(r.CrossFilteringBehavior) != "OneDirection":
-            fmeta["both_directions"] = True
-        if not r.IsActive:
-            fmeta["inactive"] = True
-        if fmeta:
-            foreign_entity["config"] = {"meta": fmeta}
-        entities_by_table.setdefault(from_table, {})[name] = foreign_entity
+    rels = [
+        (r.FromTable.Name, source(r.FromColumn), r.ToTable.Name, source(r.ToColumn),
+         str(r.CrossFilteringBehavior) != "OneDirection", not r.IsActive)
+        for r in model.Relationships
+    ]
+    files, sms = {}, {}
+    for path, doc, sm, table_name in iter_semantic_models(config):
+        files[path] = doc
+        sms[table_name] = sm
+    skipped = export_entities(sms, rels, {t.Name for t in model.Tables})
+    if skipped:
+        print(f"RELATIONSHIPS: {skipped} skipped, a table has no semantic-model YAML.")
 
     written = 0
-    for table_name, entities in entities_by_table.items():
-        dbt_model = table_to_model.get(table_name)
-        if not dbt_model:
-            print(f'  WARNING: "{table_name}" has TMDL relationships but no schema YAML entry, skipping')
-            continue
-        out_file = config.semantic_models_dir / f"{re.sub(r'[^A-Za-z0-9]+', '_', table_name).strip('_').lower()}.yml"
-        if not out_file.exists():
-            print(f'  WARNING: no semantic model file for "{table_name}" at {out_file.name}, skipping')
-            continue
-        with open(out_file, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-        ordered = sorted(entities.values(), key=lambda e: e["name"])
-        doc["semantic_models"][0]["entities"] = ordered
-        text = yaml.safe_dump(doc, default_flow_style=False, sort_keys=False, allow_unicode=True, width=200)
-        out_file.write_text(text, encoding="utf-8")
-        written += 1
-
-    print(f"Exported {len(model.Relationships)} relationship(s) across {written} file(s)")
+    for path, doc in files.items():
+        if doc != yaml.safe_load(path.read_text(encoding="utf-8")):
+            text = yaml.safe_dump(doc, default_flow_style=False, sort_keys=False,
+                                  allow_unicode=True, width=200)
+            path.write_text(text, encoding="utf-8")
+            written += 1
+    print(f"Exported {len(rels) - skipped} relationship(s) across {written} file(s)")
 
 
 def sync(config: TmdlProjectConfig):

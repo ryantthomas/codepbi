@@ -12,8 +12,47 @@ from .config import TmdlProjectConfig
 
 _BAD_LINE_LITERALS = {r"\r", r"\n", r"\t", r"\\r", r"\\n", r"\\t"}
 
-# A DAX column reference: 'Table Name'[Column Name]
-_DAX_REF_RE = re.compile(r"'([^']+)'\[([^\]]+)\]")
+# DAX tokens, scanned left to right so string literals and comments swallow anything that only
+# looks like a reference inside them: 'Table'[X] / Table[X] / bare [X] / "string" / comment.
+_DAX_TOKEN_RE = re.compile(
+    r"'((?:[^']|'')+)'(?:\[([^\]]+)\])?"
+    r"|([A-Za-z_][A-Za-z0-9_]*)\[([^\]]+)\]"
+    r"|\[([^\]]+)\]"
+    r'|"((?:[^"]|"")*)"'
+    r"|//[^\n]*|--[^\n]*|/\*.*?\*/",
+    re.DOTALL,
+)
+
+
+def dax_reference_errors(table: str, expression: str, columns: dict, measures: dict) -> list[str]:
+    """Unresolved references in a measure on `table`. columns/measures: {table: set of names}.
+
+    'Table'[X] and Table[X] must name a column or measure on Table. A bare [X] must be a
+    measure anywhere, a column on the measure's own table, or a name the expression itself
+    adds as a string literal (ADDCOLUMNS / SELECTCOLUMNS / SUMMARIZE).
+    """
+    all_measures = set().union(*measures.values())
+    tokens = list(_DAX_TOKEN_RE.finditer(expression))
+    added = {m.group(6).replace('""', '"') for m in tokens if m.group(6) is not None}
+    errors = []
+    for m in tokens:
+        quoted, quoted_col, bare_tbl, bare_col, ref = m.group(1, 2, 3, 4, 5)
+        ref_tbl = quoted.replace("''", "'") if quoted else bare_tbl
+        ref_col = quoted_col if quoted else bare_col
+        if ref_col is not None:
+            if ref_tbl not in columns:
+                errors.append(f"references table {ref_tbl!r}, which does not exist.")
+            elif ref_col not in columns[ref_tbl] | measures[ref_tbl]:
+                errors.append(
+                    f"references {ref_tbl!r}[{ref_col!r}], which does not exist. "
+                    f"A rename only rewrites the column header -- update the DAX too."
+                )
+        elif ref is not None and ref not in all_measures | columns[table] | added:
+            errors.append(
+                f"references [{ref}], which is not a measure in the model or a column on "
+                f"{table!r}. A rename only rewrites the header -- update the DAX too."
+            )
+    return errors
 
 
 def _check_file_hygiene(config: TmdlProjectConfig) -> list[str]:
@@ -175,26 +214,14 @@ def validate_tmdl(config: TmdlProjectConfig) -> None:
                     f"measures) or delete it from TMDL."
                 )
 
-    # Every 'Table'[Column] reference in measure DAX must resolve. Renaming a
-    # column only rewrites the column header, so measures silently rot otherwise.
-    known = {
-        t.Name: {c.Name for c in t.Columns} | {x.Name for x in t.Measures}
-        for t in model.Tables
-    }
+    # Every column/measure reference in measure DAX must resolve. Renaming a column only
+    # rewrites the column header, so measures silently rot otherwise.
+    columns = {t.Name: {c.Name for c in t.Columns} for t in model.Tables}
+    measures = {t.Name: {x.Name for x in t.Measures} for t in model.Tables}
     for table in model.Tables:
         for measure in table.Measures:
-            for ref_tbl, ref_col in _DAX_REF_RE.findall(str(measure.Expression)):
-                if ref_tbl not in known:
-                    errors.append(
-                        f"measure {table.Name}[{measure.Name}] references table "
-                        f"{ref_tbl!r}, which does not exist."
-                    )
-                elif ref_col not in known[ref_tbl]:
-                    errors.append(
-                        f"measure {table.Name}[{measure.Name}] references "
-                        f"{ref_tbl!r}[{ref_col!r}], which does not exist. "
-                        f"A rename only rewrites the column header -- update the DAX too."
-                    )
+            for e in dax_reference_errors(table.Name, str(measure.Expression), columns, measures):
+                errors.append(f"measure {table.Name}[{measure.Name}] {e}")
 
     # 2+ active relationships between the same table pair (PBI ambiguity)
     pair_counts = Counter(
