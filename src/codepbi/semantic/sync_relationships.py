@@ -111,6 +111,17 @@ def load(config: TmdlProjectConfig) -> list[dict]:
     return rels
 
 
+def in_model(rels: list[dict], tables: set[str]) -> tuple[list[dict], int]:
+    """Keep relationships whose two tables are both in this model.
+
+    One dbt project can feed several semantic models, each holding a subset of
+    its tables, so a relationship to a table another model owns is skipped, not
+    an error -- the same way sync_measures skips measures of a missing table.
+    """
+    kept = [r for r in rels if r["from"] in tables and r["to"] in tables]
+    return kept, len(rels) - len(kept)
+
+
 def _key(r):
     return (r["from"], r["from_column"], r["to"], r["to_column"])
 
@@ -174,12 +185,14 @@ def sync(config: TmdlProjectConfig):
             print(f"RELATIONSHIPS: {e}")
         raise SystemExit(f"semantic-model YAML relationship validation failed: {len(errors)} issue(s)")
 
-    wanted = {_key(r): r for r in wanted_rows}
-
     # load_model() triggers tom_utils._ensure_loaded(), which adds the CLR
     # references -- this import must come after, or it fails with
     # ModuleNotFoundError: No module named 'Microsoft'.
     db, model = tom_utils.load_model(config)
+    wanted_rows, skipped = in_model(wanted_rows, {t.Name for t in model.Tables})
+    if skipped:
+        print(f"RELATIONSHIPS: {skipped} skipped, a table is not in this model.")
+    wanted = {_key(r): r for r in wanted_rows}
     from Microsoft.AnalysisServices.Tabular import (
         CrossFilteringBehavior, RelationshipEndCardinality, SingleColumnRelationship)
 

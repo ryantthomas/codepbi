@@ -82,6 +82,11 @@ class TestSyncRelationshipsValidation(unittest.TestCase):
         self.assertEqual(rel["to"], "Customers")
         self.assertEqual(rel["to_column"], "Customer ID")
 
+    def test_in_model_skips_relationships_to_tables_in_another_model(self):
+        rels = sync_relationships.load(make_config(Path(".")))
+        self.assertEqual(sync_relationships.in_model(rels, {"Orders", "Customers"}), (rels, 0))
+        self.assertEqual(sync_relationships.in_model(rels, {"Orders"}), ([], 1))
+
 
 class TestDbtSql(unittest.TestCase):
     def test_sql_exprs_reads_select_list(self):
