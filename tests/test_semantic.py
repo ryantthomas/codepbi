@@ -13,6 +13,7 @@ from codepbi.semantic import schema_loader, sync_measures, sync_relationships
 from codepbi.semantic.config import TmdlProjectConfig
 from codepbi.semantic.dbt_sql import sql_exprs
 from codepbi.semantic.tom_utils import pbi_table_of
+from codepbi.semantic.validate_tmdl import dax_reference_errors
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sample_dbt_project"
 
@@ -150,6 +151,32 @@ class TestMeasures(unittest.TestCase):
 
     def test_export_drops_measures_gone_from_tmdl(self):
         self.assertEqual(sync_measures.export_measures([{"name": "x", "label": "X"}], []), [])
+
+
+class TestDaxReferences(unittest.TestCase):
+    COLUMNS = {"Orders": {"Order Amount", "Region"}, "Customers": {"Customer ID"}}
+    MEASURES = {"Orders": {"Total Sales"}, "Customers": {"Customer Count"}}
+
+    def errors(self, expression, table="Orders"):
+        return dax_reference_errors(table, expression, self.COLUMNS, self.MEASURES)
+
+    def test_valid_references_pass(self):
+        dax = (
+            "SUM('Orders'[Order Amount]) + Orders[Total Sales] + [Customer Count] "
+            "+ [Region] + SUMX(ADDCOLUMNS(Orders, \"@x\", 1), [@x])"
+        )
+        self.assertEqual(self.errors(dax), [])
+
+    def test_bare_reference_to_column_on_another_table_fails(self):
+        self.assertEqual(len(self.errors("[Customer ID]")), 1)
+        self.assertEqual(self.errors("[Customer ID]", table="Customers"), [])
+
+    def test_unquoted_and_quoted_unknowns_fail(self):
+        self.assertEqual(len(self.errors("Orders[Old Name] + 'Nope'[X] + [Gone]")), 3)
+
+    def test_strings_and_comments_are_ignored(self):
+        dax = "\"see [Gone]\" // [Gone]\n-- 'Nope'[X]\n/* Orders[Old] */ [Total Sales]"
+        self.assertEqual(self.errors(dax), [])
 
 
 class TestDbtSql(unittest.TestCase):
