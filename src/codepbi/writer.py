@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 
 from .ids import guid
@@ -29,34 +30,46 @@ def _projection(f) -> dict:
     }
 
 
+def _literal(value) -> dict:
+    if isinstance(value, bool):
+        text = "true" if value else "false"
+    elif isinstance(value, int):
+        text = f"{value}L"
+    elif isinstance(value, float):
+        text = f"{value}D"
+    elif isinstance(value, datetime):
+        text = f"datetime'{value:%Y-%m-%dT%H:%M:%S}'"
+    elif isinstance(value, date):
+        text = f"datetime'{value:%Y-%m-%d}T00:00:00'"
+    else:
+        text = "'" + str(value).replace("'", "''") + "'"
+    return {"Literal": {"Value": text}}
+
+
 def _filter_json(filt: Filter) -> dict:
     base = {
         "name": filt.name,
         "field": field_ref(filt.entity, filt.property),
         "type": filt.kind,
     }
-    if filt.kind == "Advanced" and filt.value is not None:
-        base["filter"] = {
-            "Version": 2,
-            "From": [{"Name": "c", "Entity": filt.entity, "Type": 0}],
-            "Where": [
-                {
-                    "Condition": {
-                        "Comparison": {
-                            "ComparisonKind": 0,
-                            "Left": {
-                                "Column": {
-                                    "Expression": {"SourceRef": {"Source": "c"}},
-                                    "Property": filt.property,
-                                }
-                            },
-                            "Right": {"Literal": {"Value": f"'{filt.value}'"}},
-                        }
-                    }
-                }
-            ],
+    column = {
+        "Column": {"Expression": {"SourceRef": {"Source": "c"}}, "Property": filt.property}
+    }
+    if filt.values:
+        values = [[_literal(v)] for v in filt.values]
+        condition = {"In": {"Expressions": [column], "Values": values}}
+    elif filt.kind == "Advanced" and filt.value is not None:
+        condition = {
+            "Comparison": {"ComparisonKind": 0, "Left": column, "Right": _literal(filt.value)}
         }
-        base["howCreated"] = "User"
+    else:
+        return base
+    base["filter"] = {
+        "Version": 2,
+        "From": [{"Name": "c", "Entity": filt.entity, "Type": 0}],
+        "Where": [{"Condition": condition}],
+    }
+    base["howCreated"] = "User"
     return base
 
 

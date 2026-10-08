@@ -119,21 +119,28 @@ class Position:
 @dataclass
 class Filter:
     """A filter pane entry on a visual. Use `categorical` to just expose a field as filterable,
-    or `equals` to pre-apply a fixed condition (matches what PBI Desktop itself emits)."""
+    `equals` to pre-apply a fixed condition, or `in_` to pre-select a list of values (matches
+    what PBI Desktop itself emits). Values are typed by their Python type: str, int, float,
+    bool, date or datetime."""
 
     entity: str
     property: str
     kind: str  # "Categorical" or "Advanced"
-    value: str | None = None
+    value: object = None
     name: str = field(default_factory=hex_id)
+    values: list | None = None
 
     @staticmethod
     def categorical(entity: str, property: str) -> Filter:
         return Filter(entity, property, kind="Categorical")
 
     @staticmethod
-    def equals(entity: str, property: str, value: str) -> Filter:
+    def equals(entity: str, property: str, value) -> Filter:
         return Filter(entity, property, kind="Advanced", value=value)
+
+    @staticmethod
+    def in_(entity: str, property: str, values: list) -> Filter:
+        return Filter(entity, property, kind="Categorical", values=list(values))
 
 
 @dataclass

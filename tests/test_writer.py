@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import date, datetime
 from pathlib import Path
 
 from codepbi import Field, Filter, Position, Report, column_width, drillthrough_binding, visual_interaction
@@ -426,6 +427,37 @@ class TestWriteReport(unittest.TestCase):
             # original folder+extension guess down to this.
             theme_item = next(i for i in report_json["resourcePackages"][0]["items"] if i["type"] == "CustomTheme")
             self.assertEqual(theme_item["path"], "Brand")
+
+
+class TestFilterLiterals(unittest.TestCase):
+    def condition(self, filt):
+        from codepbi.writer import _filter_json
+
+        return _filter_json(filt)["filter"]["Where"][0]["Condition"]
+
+    def test_equals_types_and_escapes_literals(self):
+        cases = [
+            ("O'Brien", "'O''Brien'"),
+            (5, "5L"),
+            (2.5, "2.5D"),
+            (True, "true"),
+            (date(2024, 7, 1), "datetime'2024-07-01T00:00:00'"),
+            (datetime(2024, 7, 1, 13, 5, 9), "datetime'2024-07-01T13:05:09'"),
+        ]
+        for value, expected in cases:
+            right = self.condition(Filter.equals("Orders", "Status", value))["Comparison"]["Right"]
+            self.assertEqual(right, {"Literal": {"Value": expected}})
+
+    def test_in_filter_has_one_values_row_per_value(self):
+        filt = Filter.in_("Orders", "Region", ["East", "West", 3])
+        self.assertEqual(filt.kind, "Categorical")
+        cond = self.condition(filt)["In"]
+        self.assertEqual(cond["Expressions"][0]["Column"]["Property"], "Region")
+        self.assertEqual(cond["Values"], [
+            [{"Literal": {"Value": "'East'"}}],
+            [{"Literal": {"Value": "'West'"}}],
+            [{"Literal": {"Value": "3L"}}],
+        ])
 
 
 if __name__ == "__main__":
