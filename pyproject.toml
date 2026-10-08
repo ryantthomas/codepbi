@@ -1,6 +1,6 @@
 [project]
 name = "codepbi"
-version = "0.1.8"
+version = "0.1.9"
 description = "Code-first Power BI — define pages/visuals in Python and emit a working PBIP/PBIR report; sync a TMDL semantic model from a dbt project."
 readme = "README.md"
 license = "MIT"
