@@ -459,6 +459,21 @@ class TestWriteReport(unittest.TestCase):
             self.assertNotIn("visibility", shown_json)
             self.assertTrue(self._visual_json(report, report_dir, page, card)["isHidden"])
 
+    def test_resave_drops_stale_pages_and_keeps_logical_id(self):
+        report = self.build_sample_report()
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(report.save(tmp))
+            platform = json.loads((report_dir / ".platform").read_text())
+            old_page = report.pages[0]
+            report.pages = []
+            report.active_page_name = None
+            new_page = report.add_page("Replacement")
+            report.save(tmp)
+            pages_dir = report_dir / "definition" / "pages"
+            self.assertFalse((pages_dir / old_page.name).exists())
+            self.assertTrue((pages_dir / new_page.name / "page.json").exists())
+            self.assertEqual(json.loads((report_dir / ".platform").read_text()), platform)
+
 
 class TestFilterLiterals(unittest.TestCase):
     def condition(self, filt):

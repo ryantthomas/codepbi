@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 
@@ -192,6 +193,14 @@ def write_report(report: Report, parent_dir: str) -> str:
     `report.semantic_model_path` must point at one that already exists (relative to the .Report folder)."""
     parent = Path(parent_dir)
     report_dir = parent / f"{report.name}.Report"
+    # Regenerating into an existing folder: drop what a previous save wrote so removed pages
+    # and resources don't linger, and keep the logicalId so the report keeps its identity.
+    for generated in (report_dir / "definition" / "pages",
+                      report_dir / "StaticResources" / "RegisteredResources"):
+        shutil.rmtree(generated, ignore_errors=True)
+    platform = report_dir / ".platform"
+    logical_id = (json.loads(platform.read_text(encoding="utf-8"))["config"]["logicalId"]
+                  if platform.exists() else guid())
 
     _write_json(
         parent / f"{report.name}.pbip",
@@ -208,7 +217,7 @@ def write_report(report: Report, parent_dir: str) -> str:
         {
             "$schema": PLATFORM_SCHEMA,
             "metadata": {"type": "Report", "displayName": report.name},
-            "config": {"version": "2.0", "logicalId": guid()},
+            "config": {"version": "2.0", "logicalId": logical_id},
         },
     )
 
