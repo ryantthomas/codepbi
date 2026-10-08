@@ -121,6 +121,12 @@ class TestExportRelationships(unittest.TestCase):
 
 
 class TestMeasures(unittest.TestCase):
+    def test_load_by_table_splits_prose_from_dax(self):
+        entry = sync_measures.load_by_table(make_config(Path(".")))["Orders"][0]
+        self.assertEqual(entry["name"], "Total Order Amount")
+        self.assertEqual(entry["description"], "Total across selected orders.")
+        self.assertEqual(entry["dax"], "SUM('Orders'[Order Amount])")
+
     def test_export_merges_by_label_and_names_new_measures(self):
         config = make_config(Path("."))
         sm = next(sm for _p, _d, sm, t in schema_loader.iter_semantic_models(config)

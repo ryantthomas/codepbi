@@ -27,14 +27,16 @@ def _split_description(description):
 
 
 def load_by_table(config: TmdlProjectConfig) -> dict:
-    """semantic-model YAML -> {tmdl_table_name: [{name, dax, formatString, displayFolder}]}."""
+    """semantic-model YAML -> {tmdl_table_name: [{name, description, dax, formatString,
+    displayFolder}]}."""
     by_table = {}
     for _path, _doc, sm, table_name in iter_semantic_models(config):
         for m in sm.get("measures") or []:
             meta = ((m.get("config") or {}).get("meta")) or {}
-            _, dax = _split_description(m.get("description"))
+            prose, dax = _split_description(m.get("description"))
             by_table.setdefault(table_name, []).append({
                 "name": m.get("label") or m["name"],
+                "description": prose,
                 "dax": dax,
                 "formatString": meta.get("format_string", ""),
                 "displayFolder": meta.get("displayFolder", "Calculations"),
@@ -109,8 +111,9 @@ def export(config: TmdlProjectConfig):
     print(f"Exported {total} measure(s) across {written} file(s)")
 
 
-def sync(config: TmdlProjectConfig):
-    """Apply semantic-model YAML measures -> TMDL via TOM."""
+def sync(config: TmdlProjectConfig, prune: bool = False):
+    """Apply semantic-model YAML measures -> TMDL via TOM. prune also removes TMDL measures
+    that YAML does not declare, on tables that have measures in YAML."""
     by_table = load_by_table(config)
     total = sum(len(v) for v in by_table.values())
     if not total:
@@ -120,13 +123,16 @@ def sync(config: TmdlProjectConfig):
     db, model = load_model(config)
     from Microsoft.AnalysisServices.Tabular import Measure
 
-    updated = created = 0
+    updated = created = pruned = 0
+    missing = {t: len(v) for t, v in by_table.items() if model.Tables.Find(t) is None}
+    if missing:
+        print(f"Measures: {sum(missing.values())} on {len(missing)} table(s) not in this model, "
+              f"skipped.")
 
     for table_name, entries in by_table.items():
-        table = model.Tables.Find(table_name)
-        if table is None:
-            print(f'  WARNING: table "{table_name}" not found, skipping its measures')
+        if table_name in missing:
             continue
+        table = model.Tables[table_name]
 
         for entry in entries:
             measure_name = entry["name"]
@@ -139,6 +145,7 @@ def sync(config: TmdlProjectConfig):
                 changed = set_if_changed(existing, "Expression", dax.strip(), lambda v: (v or "").strip())
                 changed |= set_if_changed(existing, "FormatString", fmt)
                 changed |= set_if_changed(existing, "DisplayFolder", folder)
+                changed |= set_if_changed(existing, "Description", entry["description"])
                 if changed:
                     updated += 1
             else:
@@ -147,8 +154,16 @@ def sync(config: TmdlProjectConfig):
                 m.Expression = dax
                 m.FormatString = fmt
                 m.DisplayFolder = folder
+                m.Description = entry["description"]
                 table.Measures.Add(m)
                 created += 1
 
+        if prune:
+            wanted = {e["name"] for e in entries}
+            for m in [m for m in table.Measures if m.Name not in wanted]:
+                table.Measures.Remove(m)
+                pruned += 1
+
     save_model(config, db)
-    print(f"Measures synced: {created} created, {updated} updated ({total} total in config)")
+    print(f"Measures synced: {created} created, {updated} updated, {pruned} pruned "
+          f"({total} total in config)")
