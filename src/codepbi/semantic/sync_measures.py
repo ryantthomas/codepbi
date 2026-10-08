@@ -11,15 +11,19 @@ import re
 import yaml
 
 from .config import TmdlProjectConfig
-from .schema_loader import iter_semantic_models, load_schema
+from .schema_loader import iter_semantic_models
 from .tom_utils import load_model, save_model, set_if_changed
 
 _DAX_RE = re.compile(r"DAX:\s*(.*)$", re.DOTALL)
 
 
-def _dax_from_description(description):
-    m = _DAX_RE.search(description or "")
-    return m.group(1).strip() if m else ""
+def _split_description(description):
+    """'prose DAX: expr' -> (prose, expr), both stripped; no marker -> (description, '')."""
+    description = description or ""
+    m = _DAX_RE.search(description)
+    if not m:
+        return description.strip(), ""
+    return description[:m.start()].strip(), m.group(1).strip()
 
 
 def load_by_table(config: TmdlProjectConfig) -> dict:
@@ -28,57 +32,80 @@ def load_by_table(config: TmdlProjectConfig) -> dict:
     for _path, _doc, sm, table_name in iter_semantic_models(config):
         for m in sm.get("measures") or []:
             meta = ((m.get("config") or {}).get("meta")) or {}
+            _, dax = _split_description(m.get("description"))
             by_table.setdefault(table_name, []).append({
                 "name": m.get("label") or m["name"],
-                "dax": _dax_from_description(m.get("description", "")),
+                "dax": dax,
                 "formatString": meta.get("format_string", ""),
                 "displayFolder": meta.get("displayFolder", "Calculations"),
             })
     return by_table
 
 
-def export(config: TmdlProjectConfig):
-    """Export TMDL measures back into each table's semantic-model YAML, replacing
-    only its `measures:` block -- entities/dimensions/description untouched."""
-    table_to_model = {name: spec["model"] for name, spec in load_schema(config).items()}
+def export_measures(entries: list[dict], measures: list[dict]) -> list[dict]:
+    """Merge TMDL measures ({name, dax, formatString, displayFolder}) into a table's YAML
+    `measures:` entries, matched by label or name. A match keeps its name, agg and prose and
+    gets the DAX, format_string and displayFolder updated; a new measure gets a snake_case
+    name from its label and goes last; an entry with no TMDL measure is dropped."""
+    by_name = {m["name"]: m for m in measures}
+    pairs = []
+    for e in entries:
+        key = e.get("label") if e.get("label") in by_name else e["name"]
+        if key in by_name:
+            pairs.append((dict(e), by_name.pop(key)))
+    for m in by_name.values():
+        name = re.sub(r"[^A-Za-z0-9]+", "_", m["name"]).strip("_").lower()
+        pairs.append(({"name": name, "agg": "sum", "label": m["name"]}, m))
 
-    db, model = load_model(config)
-    by_table = {}
+    out = []
+    for entry, m in pairs:
+        prose, _ = _split_description(entry.get("description"))
+        entry["description"] = f"{prose} DAX: {m['dax']}" if prose else f"DAX: {m['dax']}"
+        config = dict(entry.get("config") or {})
+        meta = dict(config.get("meta") or {})
+        if m["formatString"] or "format_string" in meta:
+            meta["format_string"] = m["formatString"]
+        meta["displayFolder"] = m["displayFolder"]
+        entry["config"] = {**config, "meta": meta}
+        out.append(entry)
+    return out
+
+
+def export(config: TmdlProjectConfig):
+    """Write the current TMDL measures back into the semantic-model YAML `measures:` blocks
+    of this model's tables -- entities/dimensions/description untouched."""
+    _, model = load_model(config)
+    files, sms = {}, {}
+    for path, doc, sm, table_name in iter_semantic_models(config):
+        files[path] = doc
+        sms[table_name] = sm
+
+    total = 0
     for table in model.Tables:
-        entries = []
-        for m in table.Measures:
-            entries.append({
-                "name": m.Name,
-                "agg": "sum",
-                "label": m.Name,
-                "description": f"DAX: {m.Expression.strip()}",
-                "config": {"meta": {
-                    "format_string": m.FormatString or "",
-                    "displayFolder": m.DisplayFolder or "Calculations",
-                }},
-            })
-        if entries:
-            entries.sort(key=lambda e: e["name"])
-            by_table[table.Name] = entries
+        measures = [{
+            "name": m.Name,
+            "dax": (m.Expression or "").strip(),
+            "formatString": m.FormatString or "",
+            "displayFolder": m.DisplayFolder or "Calculations",
+        } for m in table.Measures]
+        sm = sms.get(table.Name)
+        if sm is None:
+            if measures:
+                print(f'  WARNING: "{table.Name}" has TMDL measures but no semantic-model YAML, '
+                      f"skipping")
+            continue
+        merged = export_measures(sm.get("measures") or [], measures)
+        if merged or "measures" in sm:
+            sm["measures"] = merged
+        total += len(measures)
 
     written = 0
-    for table_name, measures in by_table.items():
-        dbt_model = table_to_model.get(table_name)
-        if not dbt_model:
-            print(f'  WARNING: "{table_name}" has TMDL measures but no schema YAML entry, skipping')
-            continue
-        out_file = config.semantic_models_dir / f"{re.sub(r'[^A-Za-z0-9]+', '_', table_name).strip('_').lower()}.yml"
-        if not out_file.exists():
-            print(f'  WARNING: no semantic model file for "{table_name}" at {out_file.name}, skipping')
-            continue
-        with open(out_file, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-        doc["semantic_models"][0]["measures"] = measures
-        text = yaml.safe_dump(doc, default_flow_style=False, sort_keys=False, allow_unicode=True, width=200)
-        out_file.write_text(text, encoding="utf-8")
-        written += 1
-
-    total = sum(len(v) for v in by_table.values())
+    for path, doc in files.items():
+        if doc != yaml.safe_load(path.read_text(encoding="utf-8")):
+            text = yaml.safe_dump(doc, default_flow_style=False, sort_keys=False,
+                                  allow_unicode=True, width=200)
+            path.write_text(text, encoding="utf-8")
+            written += 1
     print(f"Exported {total} measure(s) across {written} file(s)")
 
 

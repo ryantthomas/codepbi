@@ -9,7 +9,7 @@ validate_tmdl.validate_tmdl, check_drift.check) need the Microsoft.AnalysisServi
 import unittest
 from pathlib import Path
 
-from codepbi.semantic import schema_loader, sync_relationships
+from codepbi.semantic import schema_loader, sync_measures, sync_relationships
 from codepbi.semantic.config import TmdlProjectConfig
 from codepbi.semantic.dbt_sql import sql_exprs
 from codepbi.semantic.tom_utils import pbi_table_of
@@ -86,6 +86,64 @@ class TestSyncRelationshipsValidation(unittest.TestCase):
         rels = sync_relationships.load(make_config(Path(".")))
         self.assertEqual(sync_relationships.in_model(rels, {"Orders", "Customers"}), (rels, 0))
         self.assertEqual(sync_relationships.in_model(rels, {"Orders"}), ([], 1))
+
+
+class TestExportRelationships(unittest.TestCase):
+    def sms(self):
+        config = make_config(Path("."))
+        return {t: sm for _p, _d, sm, t in schema_loader.iter_semantic_models(config)}
+
+    def test_export_round_trips_source_names_and_keeps_names(self):
+        sms = self.sms()
+        sms["Customers"]["entities"][0]["description"] = "The customer."
+        rels = [("Orders", "customer_id", "Customers", "customer_id", True, False)]
+        skipped = sync_relationships.export_entities(sms, rels, {"Orders", "Customers"})
+        self.assertEqual(skipped, 0)
+        self.assertEqual(sms["Customers"]["entities"], [
+            {"name": "customer", "type": "primary", "expr": "customer_id",
+             "description": "The customer."},
+        ])
+        self.assertEqual(sms["Orders"]["entities"], [
+            {"name": "customer", "type": "foreign", "expr": "customer_id",
+             "config": {"meta": {"both_directions": True}}},
+        ])
+
+    def test_export_drops_removed_in_model_join(self):
+        sms = self.sms()
+        sync_relationships.export_entities(sms, [], {"Orders", "Customers"})
+        self.assertNotIn("entities", sms["Orders"])
+        self.assertEqual(len(sms["Customers"]["entities"]), 1)
+
+    def test_export_keeps_join_to_table_in_another_model(self):
+        sms = self.sms()
+        sync_relationships.export_entities(sms, [], {"Orders"})
+        self.assertEqual(sms["Orders"]["entities"][0]["name"], "customer")
+
+
+class TestMeasures(unittest.TestCase):
+    def test_export_merges_by_label_and_names_new_measures(self):
+        config = make_config(Path("."))
+        sm = next(sm for _p, _d, sm, t in schema_loader.iter_semantic_models(config)
+                  if t == "Orders")
+        measures = [
+            {"name": "Total Order Amount", "dax": "SUMX('Orders', [Order Amount])",
+             "formatString": "0", "displayFolder": "Totals"},
+            {"name": "Order Count", "dax": "COUNTROWS('Orders')",
+             "formatString": "", "displayFolder": "Calculations"},
+        ]
+        merged = sync_measures.export_measures(sm["measures"], measures)
+        self.assertEqual(merged[0], {
+            "name": "total_order_amount",
+            "agg": "sum",
+            "label": "Total Order Amount",
+            "description": "Total across selected orders. DAX: SUMX('Orders', [Order Amount])",
+            "config": {"meta": {"format_string": "0", "displayFolder": "Totals"}},
+        })
+        self.assertEqual(merged[1]["name"], "order_count")
+        self.assertEqual(merged[1]["description"], "DAX: COUNTROWS('Orders')")
+
+    def test_export_drops_measures_gone_from_tmdl(self):
+        self.assertEqual(sync_measures.export_measures([{"name": "x", "label": "X"}], []), [])
 
 
 class TestDbtSql(unittest.TestCase):
