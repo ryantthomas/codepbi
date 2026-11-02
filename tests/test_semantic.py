@@ -9,7 +9,7 @@ validate_tmdl.validate_tmdl, check_drift.check) need the Microsoft.AnalysisServi
 import unittest
 from pathlib import Path
 
-from codepbi.semantic import schema_loader, sync_measures, sync_relationships
+from codepbi.semantic import metric_dax, schema_loader, sync_measures, sync_relationships
 from codepbi.semantic.config import TmdlProjectConfig
 from codepbi.semantic.dbt_sql import sql_exprs
 from codepbi.semantic.tom_utils import pbi_table_of
@@ -202,3 +202,32 @@ class TestDbtSql(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMetricDax(unittest.TestCase):
+    TABLES = {"orders": "Orders"}
+    COLUMNS = {("Orders", "order_amount"): "Order Amount"}
+    LABELS = {"total": "Total Order Amount", "count": "Order Count", "ratio": "Average Order"}
+
+    def render(self, metric):
+        return metric_dax.render(metric, self.TABLES, self.COLUMNS, self.LABELS)
+
+    def test_simple_column_aggregation(self):
+        metric = {"type": "simple", "type_params": {"expr": "order_amount",
+                  "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}}}
+        self.assertEqual(self.render(metric), "SUM('Orders'[Order Amount])")
+
+    def test_ratio_and_derived_reference_measures(self):
+        ratio = {"type": "ratio", "type_params": {"numerator": {"name": "total"}, "denominator": {"name": "count"}}}
+        self.assertEqual(self.render(ratio), "DIVIDE([Total Order Amount], [Order Count])")
+        derived = {"type": "derived", "type_params": {"expr": "t - c", "metrics": [
+            {"name": "total", "alias": "t"}, {"name": "count", "alias": "c"}]}}
+        self.assertEqual(self.render(derived), "[Total Order Amount] - [Order Count]")
+
+    def test_unsupported_shapes_need_hand_written_dax(self):
+        sql_expr = {"type": "simple", "type_params": {"expr": "order_amount * 2",
+                    "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}}}
+        filtered = {"type": "simple", "filter": "x", "type_params": {"expr": "order_amount",
+                    "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}}}
+        self.assertIsNone(self.render(sql_expr))
+        self.assertIsNone(self.render(filtered))
