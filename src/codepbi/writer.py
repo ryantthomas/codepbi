@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+from datetime import date, datetime
 from pathlib import Path
 
 from .ids import guid
@@ -29,49 +31,63 @@ def _projection(f) -> dict:
     }
 
 
+def _literal(value) -> dict:
+    if isinstance(value, bool):
+        text = "true" if value else "false"
+    elif isinstance(value, int):
+        text = f"{value}L"
+    elif isinstance(value, float):
+        text = f"{value}D"
+    elif isinstance(value, datetime):
+        text = f"datetime'{value:%Y-%m-%dT%H:%M:%S}'"
+    elif isinstance(value, date):
+        text = f"datetime'{value:%Y-%m-%d}T00:00:00'"
+    else:
+        text = "'" + str(value).replace("'", "''") + "'"
+    return {"Literal": {"Value": text}}
+
+
 def _filter_json(filt: Filter) -> dict:
     base = {
         "name": filt.name,
         "field": field_ref(filt.entity, filt.property),
         "type": filt.kind,
     }
-    if filt.kind == "Advanced" and filt.value is not None:
-        base["filter"] = {
-            "Version": 2,
-            "From": [{"Name": "c", "Entity": filt.entity, "Type": 0}],
-            "Where": [
-                {
-                    "Condition": {
-                        "Comparison": {
-                            "ComparisonKind": 0,
-                            "Left": {
-                                "Column": {
-                                    "Expression": {"SourceRef": {"Source": "c"}},
-                                    "Property": filt.property,
-                                }
-                            },
-                            "Right": {"Literal": {"Value": f"'{filt.value}'"}},
-                        }
-                    }
-                }
-            ],
+    column = {
+        "Column": {"Expression": {"SourceRef": {"Source": "c"}}, "Property": filt.property}
+    }
+    if filt.values:
+        values = [[_literal(v)] for v in filt.values]
+        condition = {"In": {"Expressions": [column], "Values": values}}
+    elif filt.kind == "Advanced" and filt.value is not None:
+        condition = {
+            "Comparison": {"ComparisonKind": 0, "Left": column, "Right": _literal(filt.value)}
         }
-        base["howCreated"] = "User"
+    else:
+        return base
+    base["filter"] = {
+        "Version": 2,
+        "From": [{"Name": "c", "Entity": filt.entity, "Type": 0}],
+        "Where": [{"Condition": condition}],
+    }
+    base["howCreated"] = "User"
     return base
 
 
-def _visual_json(visual: Visual) -> dict:
+def _visual_json(visual: Visual, index: int) -> dict:
     pos = visual.position
+    # Desktop spaces z and tabOrder 1000 apart in insertion order.
+    z = index * 1000 if pos.z is None else pos.z
     data = {
         "$schema": VISUAL_SCHEMA,
         "name": visual.name,
         "position": {
             "x": pos.x,
             "y": pos.y,
-            "z": pos.z,
+            "z": z,
             "height": pos.height,
             "width": pos.width,
-            "tabOrder": pos.tab_order,
+            "tabOrder": z if pos.tab_order is None else pos.tab_order,
         },
     }
     if visual.visual_group is not None:
@@ -101,6 +117,8 @@ def _visual_json(visual: Visual) -> dict:
         data["parentGroupName"] = visual.parent_group_name
     if visual.filters:
         data["filterConfig"] = {"filters": [_filter_json(f) for f in visual.filters]}
+    if visual.is_hidden:
+        data["isHidden"] = True
     return data
 
 
@@ -115,6 +133,8 @@ def _page_json(page: Page) -> dict:
     }
     if page.page_type:
         data["type"] = page.page_type
+    if page.hidden:
+        data["visibility"] = "HiddenInViewMode"
     if page.page_binding:
         data["pageBinding"] = page.page_binding
     if page.visual_interactions:
@@ -173,6 +193,14 @@ def write_report(report: Report, parent_dir: str) -> str:
     `report.semantic_model_path` must point at one that already exists (relative to the .Report folder)."""
     parent = Path(parent_dir)
     report_dir = parent / f"{report.name}.Report"
+    # Regenerating into an existing folder: drop what a previous save wrote so removed pages
+    # and resources don't linger, and keep the logicalId so the report keeps its identity.
+    for generated in (report_dir / "definition" / "pages",
+                      report_dir / "StaticResources" / "RegisteredResources"):
+        shutil.rmtree(generated, ignore_errors=True)
+    platform = report_dir / ".platform"
+    logical_id = (json.loads(platform.read_text(encoding="utf-8"))["config"]["logicalId"]
+                  if platform.exists() else guid())
 
     _write_json(
         parent / f"{report.name}.pbip",
@@ -189,7 +217,7 @@ def write_report(report: Report, parent_dir: str) -> str:
         {
             "$schema": PLATFORM_SCHEMA,
             "metadata": {"type": "Report", "displayName": report.name},
-            "config": {"version": "2.0", "logicalId": guid()},
+            "config": {"version": "2.0", "logicalId": logical_id},
         },
     )
 
@@ -232,7 +260,7 @@ def write_report(report: Report, parent_dir: str) -> str:
     for page in report.pages:
         page_dir = report_dir / "definition" / "pages" / page.name
         _write_json(page_dir / "page.json", _page_json(page))
-        for visual in page.visuals:
-            _write_json(page_dir / "visuals" / visual.name / "visual.json", _visual_json(visual))
+        for i, visual in enumerate(page.visuals):
+            _write_json(page_dir / "visuals" / visual.name / "visual.json", _visual_json(visual, i))
 
     return str(report_dir)
