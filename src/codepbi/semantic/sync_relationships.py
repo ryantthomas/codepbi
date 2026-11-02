@@ -193,6 +193,9 @@ def export(config: TmdlProjectConfig):
     """Write the current TMDL relationships back into the semantic-model YAML `entities:`
     blocks of this model's tables -- dimensions/measures/description untouched. Use this to
     seed the files the first time, or to recover if TMDL and the YAML ever disagree."""
+    if config.semantic_manifest_path is not None:
+        raise SystemExit("export writes the per-table semantic-model YAML files; "
+                         "unset semantic_manifest_path to use it.")
     _, model = tom_utils.load_model(config)
 
     def source(col):

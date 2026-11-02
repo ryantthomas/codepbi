@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.11] - 2026-11-02
+
+### Added
+- `semantic_manifest_path` in `TmdlProjectConfig`: syncs and validation read dbt's compiled
+  `semantic_manifest.json`, with simple metrics read as measures, so both dbt's legacy and latest semantic
+  YAML specs work. Export still writes the legacy per-table files and is unavailable in this mode.
+
 ## [0.1.10] - 2026-11-02
 
 ### Added

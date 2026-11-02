@@ -28,6 +28,10 @@ class TmdlProjectConfig:
         re-parse schema YAML themselves just to read one more field.
     extra_table_meta: same idea as extra_column_meta, but for per-table `meta.*` keys.
     dbt_manifest_path: path to target/manifest.json, only needed for check_schema_vs_sql.
+    semantic_manifest_path: path to dbt's compiled target/semantic_manifest.json. When set, syncs and
+        validation read semantic models from it instead of semantic_models_subdir, and simple metrics count
+        as measures, so both dbt's legacy and latest semantic YAML specs work. Export still writes the legacy
+        per-table files and is unavailable in this mode.
     dbt_compiled_dir: folder compiled SQL is actually written under -- dbt's real layout is
         target/compiled/<dbt_project_name>/<model-paths>/..., which isn't generically
         derivable, so this must be the fully resolved path. Only needed for
@@ -44,6 +48,7 @@ class TmdlProjectConfig:
     extra_table_meta: dict[str, str] = field(default_factory=dict)
     dbt_manifest_path: Path | None = None
     dbt_compiled_dir: Path | None = None
+    semantic_manifest_path: Path | None = None
 
     def __post_init__(self) -> None:
         self.dbt_project_dir = Path(self.dbt_project_dir)
@@ -53,6 +58,8 @@ class TmdlProjectConfig:
             self.dbt_manifest_path = Path(self.dbt_manifest_path)
         if self.dbt_compiled_dir is not None:
             self.dbt_compiled_dir = Path(self.dbt_compiled_dir)
+        if self.semantic_manifest_path is not None:
+            self.semantic_manifest_path = Path(self.semantic_manifest_path)
 
     @property
     def tables_dir(self) -> Path:

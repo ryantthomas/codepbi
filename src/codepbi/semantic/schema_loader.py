@@ -3,6 +3,8 @@
 # itself -- schema YAML is the single source of truth for column metadata, so
 # there is exactly one reader for it.
 
+import json
+
 import yaml
 
 from . import tom_utils
@@ -121,11 +123,34 @@ def model_to_table(config: TmdlProjectConfig) -> dict:
     return {spec["model"]: name for name, spec in load_schema(config).items()}
 
 
+def _compiled_semantic_models(config: TmdlProjectConfig):
+    """Semantic models from dbt's compiled semantic_manifest.json, shaped like the YAML ones. The latest spec
+    turns measures into simple metrics; those are read back as the model's measures."""
+    manifest = json.loads(config.semantic_manifest_path.read_text(encoding="utf-8"))
+    metrics = {}
+    for metric in manifest.get("metrics") or []:
+        params = metric.get("type_params") or {}
+        agg = params.get("metric_aggregation_params")
+        if metric.get("type") == "simple" and agg:
+            metrics.setdefault(agg["semantic_model"], []).append({
+                "name": metric["name"], "label": metric.get("label"), "description": metric.get("description"),
+                "agg": agg["agg"], "expr": params.get("expr"), "config": metric.get("config") or {}})
+    for sm in sorted(manifest.get("semantic_models") or [], key=lambda s: s["name"]):
+        alias = sm["node_relation"]["alias"]
+        yield {**sm, "model": f"ref('{alias}')", "measures": sm.get("measures") or metrics.get(sm["name"], [])}
+
+
 def iter_semantic_models(config: TmdlProjectConfig):
-    """Yield (path, doc, sm, table_name) for every semantic-model YAML file with a
-    table resolvable via schema YAML. Shared by every function that reads
-    entities/measures out of those files, so the glob-and-parse loop exists once."""
+    """Yield (path, doc, sm, table_name) for every semantic model with a table resolvable via schema
+    YAML. Shared by every function that reads entities/measures, so the loop exists once. With
+    config.semantic_manifest_path set, models come from the compiled manifest and path/doc are None."""
     m2t = model_to_table(config)
+    if config.semantic_manifest_path is not None:
+        for sm in _compiled_semantic_models(config):
+            table_name = m2t.get(sm["model"][len("ref('"):-len("')")])
+            if table_name:
+                yield None, None, sm, table_name
+        return
     for path in sorted(config.semantic_models_dir.glob("*.yml")):
         if path.name.startswith("_"):
             continue
