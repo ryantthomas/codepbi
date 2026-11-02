@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.10] - 2026-11-02
+
+### Added
+- `meta.table_name` in schema YAML sets the Power BI table name directly, so `entity` and
+  `grain` can stay descriptive metadata when a table follows a different naming pattern.
+
 ## [0.1.9] - 2026-10-08
 
 ### Added
