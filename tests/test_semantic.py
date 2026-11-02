@@ -48,6 +48,11 @@ class TestSchemaLoader(unittest.TestCase):
         self.assertEqual(pbi_table_of({"entity": "Orders"}), "Orders")
         self.assertIsNone(pbi_table_of({}))
 
+    def test_pbi_table_of_prefers_table_name(self):
+        meta = {"entity": "Orders", "grain": "Monthly", "table_name": "Monthly Orders"}
+        self.assertEqual(pbi_table_of(meta), "Monthly Orders")
+        self.assertIsNone(pbi_table_of({"table_name": "Monthly Orders"}))
+
     def test_extra_meta_passthrough_uses_default_when_undeclared(self):
         config = TmdlProjectConfig(
             dbt_project_dir=FIXTURE_DIR,

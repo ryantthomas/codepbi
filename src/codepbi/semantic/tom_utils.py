@@ -71,14 +71,15 @@ def set_if_changed(obj, attr, want, normalize=lambda v: (v or "")):
 
 
 def pbi_table_of(meta: dict) -> str | None:
-    """Derive the PBI table name from schema YAML meta {entity, grain}."""
-    if not meta:
+    """Derive the PBI table name from schema YAML meta: `table_name` when set, otherwise
+    "{entity} - {grain}" (or entity alone). `table_name` lets a model keep entity and grain as
+    descriptive metadata while its table follows another naming pattern."""
+    if not meta or not meta.get("entity"):
         return None
-    entity = meta.get("entity")
-    if not entity:
-        return None
+    if meta.get("table_name"):
+        return meta["table_name"]
     grain = meta.get("grain")
-    return f"{entity} - {grain}" if grain else entity
+    return f"{meta['entity']} - {grain}" if grain else meta["entity"]
 
 
 _ITEM_RE = re.compile(r'Item="([^"]+)"')
