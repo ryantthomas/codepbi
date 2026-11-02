@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.12] - 2026-11-02
+
+### Added
+- With `semantic_manifest_path` set, typed MetricFlow metrics get their DAX rendered: simple (one-column
+  aggregation), ratio (`DIVIDE`) and derived (an expression of other measures). Ratio and derived metrics belong
+  to their first input's table. A metric with DAX after `DAX:` in its description keeps it as written, and one
+  with neither stops the sync.
+
 ## [0.1.11] - 2026-11-02
 
 ### Added

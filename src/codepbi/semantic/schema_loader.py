@@ -7,7 +7,7 @@ import json
 
 import yaml
 
-from . import tom_utils
+from . import metric_dax, tom_utils
 from .config import TmdlProjectConfig
 
 # schema YAML data_type -> TMDL sourceProviderType + formatString.
@@ -124,20 +124,43 @@ def model_to_table(config: TmdlProjectConfig) -> dict:
 
 
 def _compiled_semantic_models(config: TmdlProjectConfig):
-    """Semantic models from dbt's compiled semantic_manifest.json, shaped like the YAML ones. The latest spec
-    turns measures into simple metrics; those are read back as the model's measures."""
+    """Semantic models from dbt's compiled semantic_manifest.json, shaped like the YAML ones. Metrics are read
+    back as measures of their semantic model (ratio and derived ones of their first input's): DAX after "DAX:" in
+    the description is used as written, otherwise it is rendered from the metric's type (metric_dax)."""
     manifest = json.loads(config.semantic_manifest_path.read_text(encoding="utf-8"))
-    metrics = {}
-    for metric in manifest.get("metrics") or []:
-        params = metric.get("type_params") or {}
-        agg = params.get("metric_aggregation_params")
-        if metric.get("type") == "simple" and agg:
-            metrics.setdefault(agg["semantic_model"], []).append({
-                "name": metric["name"], "label": metric.get("label"), "description": metric.get("description"),
-                "agg": agg["agg"], "expr": params.get("expr"), "config": metric.get("config") or {}})
+    schema = load_schema(config)
+    model_table = {spec["model"]: name for name, spec in schema.items()}
+    table_of = {sm["name"]: model_table.get(sm["node_relation"]["alias"]) for sm in manifest.get("semantic_models") or []}
+    display_of = {(name, c["source"]): c["display"] for name, spec in schema.items() for c in spec["columns"]}
+    metrics = manifest.get("metrics") or []
+    label_of = {x["name"]: x.get("label") or x["name"] for x in metrics}
+    owner_of = {}
+    for _ in range(len(metrics)):   # a ratio of a derived metric resolves once its inputs have
+        before = len(owner_of)
+        for x in metrics:
+            found = metric_dax.owner(x, owner_of)
+            if found:
+                owner_of[x["name"]] = found
+        if len(owner_of) == before:
+            break
+    by_model = {}
+    for x in metrics:
+        if x["name"] not in owner_of:
+            continue
+        description = x.get("description") or ""
+        hand = description.split("DAX:", 1)[1].strip() if "DAX:" in description else ""
+        dax = hand or metric_dax.render(x, table_of, display_of, label_of)
+        if not dax:
+            raise SystemExit(f"metric {x['name']}: its {x.get('type')} definition has no DAX rendering; add "
+                             "hand-written DAX after 'DAX:' in its description")
+        params = x.get("type_params") or {}
+        agg = params.get("metric_aggregation_params") or {}
+        by_model.setdefault(owner_of[x["name"]], []).append({
+            "name": x["name"], "label": x.get("label"), "description": description, "agg": agg.get("agg"),
+            "expr": params.get("expr"), "config": x.get("config") or {}, "dax": dax})
     for sm in sorted(manifest.get("semantic_models") or [], key=lambda s: s["name"]):
         alias = sm["node_relation"]["alias"]
-        yield {**sm, "model": f"ref('{alias}')", "measures": sm.get("measures") or metrics.get(sm["name"], [])}
+        yield {**sm, "model": f"ref('{alias}')", "measures": sm.get("measures") or by_model.get(sm["name"], [])}
 
 
 def iter_semantic_models(config: TmdlProjectConfig):

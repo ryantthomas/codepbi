@@ -34,6 +34,7 @@ def load_by_table(config: TmdlProjectConfig) -> dict:
         for m in sm.get("measures") or []:
             meta = ((m.get("config") or {}).get("meta")) or {}
             prose, dax = _split_description(m.get("description"))
+            dax = m.get("dax") or dax   # rendered from the metric's type (compiled manifest)
             by_table.setdefault(table_name, []).append({
                 "name": m.get("label") or m["name"],
                 "description": prose,
