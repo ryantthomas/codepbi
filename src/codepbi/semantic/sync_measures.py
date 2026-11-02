@@ -76,6 +76,9 @@ def export_measures(entries: list[dict], measures: list[dict]) -> list[dict]:
 def export(config: TmdlProjectConfig):
     """Write the current TMDL measures back into the semantic-model YAML `measures:` blocks
     of this model's tables -- entities/dimensions/description untouched."""
+    if config.semantic_manifest_path is not None:
+        raise SystemExit("export writes the per-table semantic-model YAML files; "
+                         "unset semantic_manifest_path to use it.")
     _, model = load_model(config)
     files, sms = {}, {}
     for path, doc, sm, table_name in iter_semantic_models(config):

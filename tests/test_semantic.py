@@ -72,6 +72,15 @@ class TestSchemaLoader(unittest.TestCase):
         self.assertIn("Customers", found)
         self.assertEqual(found["Orders"]["entities"][0]["name"], "customer")
 
+    def test_compiled_manifest_reads_simple_metrics_as_measures(self):
+        yaml_config = make_config(Path("."))
+        compiled_config = make_config(Path("."))
+        compiled_config.semantic_manifest_path = Path(__file__).parent / "fixtures" / "semantic_manifest.json"
+        self.assertEqual(sync_relationships.load(compiled_config), sync_relationships.load(yaml_config))
+        self.assertEqual(sync_measures.load_by_table(compiled_config), sync_measures.load_by_table(yaml_config))
+        with self.assertRaises(SystemExit):
+            sync_measures.export(compiled_config)
+
 
 class TestSyncRelationshipsValidation(unittest.TestCase):
     def test_validate_passes_on_matched_primary_foreign(self):
