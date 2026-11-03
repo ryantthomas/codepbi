@@ -36,6 +36,13 @@ def _entity_name(column_friendly):
     return name or "id"
 
 
+def _joins(entity: dict) -> str:
+    """The primary entity a foreign entity joins: config.meta.joins when set (a role-playing key, e.g. a second
+    date joining the same date table, kept under its own name because one model can't repeat an entity name),
+    otherwise its own name."""
+    return (((entity.get("config") or {}).get("meta")) or {}).get("joins") or entity["name"]
+
+
 def validate(config: TmdlProjectConfig) -> list[str]:
     """Every entity's expr must be a real column source on its table, every
     'foreign' entity must have a matching same-named 'primary' entity somewhere.
@@ -66,7 +73,7 @@ def validate(config: TmdlProjectConfig) -> list[str]:
                     )
                 primaries[e["name"]] = table_name
             elif e["type"] == "foreign":
-                foreigns.append((e["name"], table_name))
+                foreigns.append((_joins(e), table_name))
 
     for name, table_name in foreigns:
         if name not in primaries:
@@ -94,7 +101,7 @@ def load(config: TmdlProjectConfig) -> list[dict]:
                 primaries[e["name"]] = (table_name, col_friendly)
             elif e["type"] == "foreign":
                 meta = ((e.get("config") or {}).get("meta")) or {}
-                foreigns.append((e["name"], table_name, col_friendly,
+                foreigns.append((_joins(e), table_name, col_friendly,
                                   bool(meta.get("both_directions")), bool(meta.get("inactive"))))
 
     rels = []
