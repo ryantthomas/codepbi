@@ -39,9 +39,12 @@ def filter_conditions(where: str, column_of: dict) -> list[str] | None:
     return out
 
 
-def render(metric: dict, table_of: dict, display_of: dict, label_of: dict, column_of: dict = None) -> str | None:
+def render(metric: dict, table_of: dict, display_of: dict, label_of: dict, column_of: dict = None,
+           userelationship_of: dict = None) -> str | None:
     """table_of: semantic model name -> TMDL table; display_of: (TMDL table, source column) -> column name;
-    label_of: metric name -> measure name; column_of: 'entity__dimension' -> 'Table'[Column] for filters."""
+    label_of: metric name -> measure name; column_of: 'entity__dimension' -> 'Table'[Column] for filters;
+    userelationship_of: (semantic model, time dimension) -> USERELATIONSHIP(...) for a metric whose
+    agg_time_dimension is a role-playing date on an inactive relationship."""
     params = metric.get("type_params") or {}
     kind = metric.get("type")
     wheres = [w.get("where_sql_template", "") for w in (metric.get("filter") or {}).get("where_filters") or []]
@@ -58,13 +61,16 @@ def render(metric: dict, table_of: dict, display_of: dict, label_of: dict, colum
             base = f"{AGG_DAX[agg['agg']]}('{table}'[{display_of[(table, expr)]}])"
         else:
             return None
-        conditions = []
+        modifiers = []
         for where in wheres:
             found = filter_conditions(where, column_of or {})
             if found is None:
                 return None
-            conditions += found
-        return f"CALCULATE({base}, " + ", ".join(f"KEEPFILTERS({c})" for c in conditions) + ")" if conditions else base
+            modifiers += [f"KEEPFILTERS({c})" for c in found]
+        role = (userelationship_of or {}).get((agg.get("semantic_model"), agg.get("agg_time_dimension")))
+        if role:
+            modifiers.append(role)
+        return f"CALCULATE({base}, " + ", ".join(modifiers) + ")" if modifiers else base
     if kind == "ratio":
         num, den = params.get("numerator") or {}, params.get("denominator") or {}
         if num.get("filter") or den.get("filter") or not num.get("name") or not den.get("name"):
