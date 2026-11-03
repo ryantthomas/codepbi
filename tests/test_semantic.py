@@ -6,10 +6,12 @@ validate_tmdl.validate_tmdl, check_drift.check) need the Microsoft.AnalysisServi
 .NET DLLs and are not covered here.
 """
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
-from codepbi.semantic import metric_dax, schema_loader, sync_measures, sync_relationships
+from codepbi.semantic import metric_dax, report_measures, schema_loader, sync_measures, sync_relationships
 from codepbi.semantic.config import TmdlProjectConfig
 from codepbi.semantic.dbt_sql import sql_exprs
 from codepbi.semantic.tom_utils import pbi_table_of
@@ -80,6 +82,34 @@ class TestSchemaLoader(unittest.TestCase):
         self.assertEqual(sync_measures.load_by_table(compiled_config), sync_measures.load_by_table(yaml_config))
         with self.assertRaises(SystemExit):
             sync_measures.export(compiled_config)
+
+
+class TestMetricGroups(unittest.TestCase):
+    def config(self, tmp, groups=()):
+        config = make_config(Path("."))
+        config.semantic_manifest_path = Path(__file__).parent / "fixtures" / "semantic_manifest.json"
+        config.dbt_manifest_path = Path(tmp) / "manifest.json"
+        config.dbt_manifest_path.write_text(json.dumps({"metrics": {
+            "metric.p.total_order_amount": {"name": "total_order_amount", "group": "orders_report"}}}))
+        config.metric_groups = set(groups)
+        return config
+
+    def test_grouped_metric_skips_the_shared_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(sync_measures.load_by_table(self.config(tmp)), {})
+            self.assertIn("Orders", sync_measures.load_by_table(self.config(tmp, {"orders_report"})))
+            self.assertIn("Orders", sync_measures.load_by_table(self.config(tmp), {"orders_report"}))
+
+    def test_report_measures_replace_synced_and_keep_hand_written(self):
+        by_table = {"Orders": [{"name": "Total Order Amount", "dax": "SUM('Orders'[Order Amount])",
+                                "formatString": "0", "displayFolder": "", "description": "", "agg": "sum"}]}
+        existing = {"name": "extension", "entities": [{"name": "Orders", "measures": [
+            {"name": "Old", "dataType": "Double", "expression": "1", "annotations": [report_measures.MARK]},
+            {"name": "Mine", "dataType": "Double", "expression": "2"}]}]}
+        out = report_measures.build(by_table, existing)
+        self.assertEqual([m["name"] for m in out["entities"][0]["measures"]], ["Mine", "Total Order Amount"])
+        self.assertEqual(out["entities"][0]["measures"][1]["dataType"], "Double")
+        self.assertEqual(out["$schema"], report_measures.SCHEMA)
 
 
 class TestSyncRelationshipsValidation(unittest.TestCase):

@@ -26,12 +26,16 @@ def _split_description(description):
     return description[:m.start()].strip(), m.group(1).strip()
 
 
-def load_by_table(config: TmdlProjectConfig) -> dict:
+def load_by_table(config: TmdlProjectConfig, groups: set | None = None) -> dict:
     """semantic-model YAML -> {tmdl_table_name: [{name, description, dax, formatString,
-    displayFolder}]}."""
+    displayFolder, agg}]}. groups: the metric groups to keep (None = ungrouped); default the
+    ungrouped metrics plus config.metric_groups."""
+    groups = {None, *config.metric_groups} if groups is None else groups
     by_table = {}
     for _path, _doc, sm, table_name in iter_semantic_models(config):
         for m in sm.get("measures") or []:
+            if m.get("group") not in groups:
+                continue
             meta = ((m.get("config") or {}).get("meta")) or {}
             prose, dax = _split_description(m.get("description"))
             dax = m.get("dax") or dax   # rendered from the metric's type (compiled manifest)
@@ -41,6 +45,7 @@ def load_by_table(config: TmdlProjectConfig) -> dict:
                 "dax": dax,
                 "formatString": meta.get("format_string", ""),
                 "displayFolder": meta.get("displayFolder", "Calculations"),
+                "agg": m.get("agg"),
             })
     return by_table
 

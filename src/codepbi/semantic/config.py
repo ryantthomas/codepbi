@@ -27,7 +27,7 @@ class TmdlProjectConfig:
         Unused by anything in this package; purely a passthrough so callers don't have to
         re-parse schema YAML themselves just to read one more field.
     extra_table_meta: same idea as extra_column_meta, but for per-table `meta.*` keys.
-    dbt_manifest_path: path to target/manifest.json, only needed for check_schema_vs_sql.
+    dbt_manifest_path: path to target/manifest.json, needed for check_schema_vs_sql and to read metric groups.
     semantic_manifest_path: path to dbt's compiled target/semantic_manifest.json. When set, syncs and
         validation read semantic models from it instead of semantic_models_subdir, and simple metrics count
         as measures, so both dbt's legacy and latest semantic YAML specs work. Export still writes the legacy
@@ -36,6 +36,8 @@ class TmdlProjectConfig:
         target/compiled/<dbt_project_name>/<model-paths>/..., which isn't generically
         derivable, so this must be the fully resolved path. Only needed for
         check_schema_vs_sql.
+    metric_groups: dbt groups whose metrics sync into this model (read from dbt_manifest_path). Ungrouped
+        metrics always do; a metric in any other group belongs to that group's report (report_measures).
     """
 
     dbt_project_dir: Path
@@ -49,6 +51,7 @@ class TmdlProjectConfig:
     dbt_manifest_path: Path | None = None
     dbt_compiled_dir: Path | None = None
     semantic_manifest_path: Path | None = None
+    metric_groups: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.dbt_project_dir = Path(self.dbt_project_dir)
