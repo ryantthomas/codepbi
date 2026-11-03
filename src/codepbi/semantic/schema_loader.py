@@ -132,6 +132,16 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
     model_table = {spec["model"]: name for name, spec in schema.items()}
     table_of = {sm["name"]: model_table.get(sm["node_relation"]["alias"]) for sm in manifest.get("semantic_models") or []}
     display_of = {(name, c["source"]): c["display"] for name, spec in schema.items() for c in spec["columns"]}
+    # filters name a dimension through an entity: entity__dimension -> 'Table'[Column]
+    column_of = {}
+    for sm in manifest.get("semantic_models") or []:
+        table = table_of.get(sm["name"])
+        primary = sm.get("primary_entity") or next(
+            (e["name"] for e in sm.get("entities") or [] if e.get("type") == "primary"), None)
+        for d in sm.get("dimensions") or []:
+            display = display_of.get((table, d.get("expr") or d["name"]))
+            if table and primary and display:
+                column_of[f"{primary}__{d['name']}"] = f"'{table}'[{display}]"
     metrics = manifest.get("metrics") or []
     label_of = {x["name"]: x.get("label") or x["name"] for x in metrics}
     owner_of = {}
@@ -149,7 +159,7 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
             continue
         description = x.get("description") or ""
         hand = description.split("DAX:", 1)[1].strip() if "DAX:" in description else ""
-        dax = hand or metric_dax.render(x, table_of, display_of, label_of)
+        dax = hand or metric_dax.render(x, table_of, display_of, label_of, column_of)
         if not dax:
             raise SystemExit(f"metric {x['name']}: its {x.get('type')} definition has no DAX rendering; add "
                              "hand-written DAX after 'DAX:' in its description")

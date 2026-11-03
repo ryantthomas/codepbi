@@ -227,7 +227,18 @@ class TestMetricDax(unittest.TestCase):
     def test_unsupported_shapes_need_hand_written_dax(self):
         sql_expr = {"type": "simple", "type_params": {"expr": "order_amount * 2",
                     "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}}}
-        filtered = {"type": "simple", "filter": "x", "type_params": {"expr": "order_amount",
-                    "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}}}
+        unknown = {"type": "simple", "type_params": {"expr": "order_amount",
+                   "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}},
+                   "filter": {"where_filters": [{"where_sql_template": "{{ Dimension('order__nope') }} = 'x'"}]}}
         self.assertIsNone(self.render(sql_expr))
-        self.assertIsNone(self.render(filtered))
+        self.assertIsNone(self.render(unknown))
+
+    def test_filters_keep_report_filters_and_row_counts(self):
+        columns = {"order__status": "'Orders'[Status]"}
+        metric = {"type": "simple", "type_params": {"expr": 1,
+                  "metric_aggregation_params": {"semantic_model": "orders", "agg": "sum"}},
+                  "filter": {"where_filters": [{"where_sql_template":
+                             "{{ Dimension('order__status') }} = 'Open' AND {{ Dimension('order__status') }} NOT IN ('A', 'B')"}]}}
+        self.assertEqual(metric_dax.render(metric, self.TABLES, self.COLUMNS, self.LABELS, columns),
+                         "CALCULATE(COUNTROWS('Orders'), KEEPFILTERS('Orders'[Status] = \"Open\"), "
+                         "KEEPFILTERS(NOT 'Orders'[Status] IN {\"A\", \"B\"}))")
