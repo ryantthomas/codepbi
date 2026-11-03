@@ -160,6 +160,10 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
                 for d in sm.get("dimensions") or []:
                     if (d.get("expr") or d["name"]) == (e.get("expr") or e["name"]):
                         userelationship_of[(sm["name"], d["name"])] = f"USERELATIONSHIP('{table}'[{column}], {target})"
+    group_of = {}
+    if config.dbt_manifest_path is not None and config.dbt_manifest_path.exists():
+        nodes = json.loads(config.dbt_manifest_path.read_text(encoding="utf-8")).get("metrics") or {}
+        group_of = {x["name"]: x.get("group") for x in nodes.values()}
     metrics = manifest.get("metrics") or []
     label_of = {x["name"]: x.get("label") or x["name"] for x in metrics}
     owner_of = {}
@@ -185,7 +189,7 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
         agg = params.get("metric_aggregation_params") or {}
         by_model.setdefault(owner_of[x["name"]], []).append({
             "name": x["name"], "label": x.get("label"), "description": description, "agg": agg.get("agg"),
-            "expr": params.get("expr"), "config": x.get("config") or {}, "dax": dax})
+            "expr": params.get("expr"), "config": x.get("config") or {}, "dax": dax, "group": group_of.get(x["name"])})
     for sm in sorted(manifest.get("semantic_models") or [], key=lambda s: s["name"]):
         alias = sm["node_relation"]["alias"]
         yield {**sm, "model": f"ref('{alias}')", "measures": sm.get("measures") or by_model.get(sm["name"], [])}
