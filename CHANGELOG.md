@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.13] - 2026-11-02
+
+### Added
+- Filtered simple metrics render to DAX: equality, `IN` and `NOT IN` conditions on dimensions (through
+  their entity, so a filter can sit on a joined table), joined with `AND`, each wrapped in `KEEPFILTERS` so it
+  narrows the report's filters as MetricFlow does. `agg: sum` with `expr: 1` renders as `COUNTROWS`.
+
 ## [0.1.12] - 2026-11-02
 
 ### Added
