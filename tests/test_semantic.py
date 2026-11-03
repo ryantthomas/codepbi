@@ -242,3 +242,16 @@ class TestMetricDax(unittest.TestCase):
         self.assertEqual(metric_dax.render(metric, self.TABLES, self.COLUMNS, self.LABELS, columns),
                          "CALCULATE(COUNTROWS('Orders'), KEEPFILTERS('Orders'[Status] = \"Open\"), "
                          "KEEPFILTERS(NOT 'Orders'[Status] IN {\"A\", \"B\"}))")
+
+    def test_role_playing_date_uses_inactive_relationship(self):
+        metric = {"type": "simple", "type_params": {"expr": "order_amount", "metric_aggregation_params": {
+            "semantic_model": "orders", "agg": "sum", "agg_time_dimension": "shipped_date"}}}
+        roles = {("orders", "shipped_date"): "USERELATIONSHIP('Orders'[Shipped Date], 'Dates'[Date])"}
+        self.assertEqual(metric_dax.render(metric, self.TABLES, self.COLUMNS, self.LABELS, {}, roles),
+                         "CALCULATE(SUM('Orders'[Order Amount]), USERELATIONSHIP('Orders'[Shipped Date], 'Dates'[Date]))")
+
+    def test_role_playing_foreign_entity_joins_named_primary(self):
+        self.assertEqual(sync_relationships._joins({"name": "ship_date", "config": {"meta": {"joins": "calendar_date"}}}),
+                         "calendar_date")
+        self.assertEqual(sync_relationships._joins({"name": "customer"}), "customer")
+

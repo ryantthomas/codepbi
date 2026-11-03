@@ -142,6 +142,24 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
             display = display_of.get((table, d.get("expr") or d["name"]))
             if table and primary and display:
                 column_of[f"{primary}__{d['name']}"] = f"'{table}'[{display}]"
+    # a role-playing date: a foreign entity on an inactive relationship, used as a metric's agg_time_dimension
+    primary_column = {}
+    for sm in manifest.get("semantic_models") or []:
+        for e in sm.get("entities") or []:
+            if e.get("type") == "primary" and table_of.get(sm["name"]):
+                column = display_of.get((table_of[sm["name"]], e.get("expr") or e["name"]))
+                primary_column[e["name"]] = f"'{table_of[sm['name']]}'[{column}]"
+    userelationship_of = {}
+    for sm in manifest.get("semantic_models") or []:
+        table = table_of.get(sm["name"])
+        for e in sm.get("entities") or []:
+            meta = (e.get("config") or {}).get("meta") or {}
+            target = primary_column.get(meta.get("joins") or e["name"])
+            column = display_of.get((table, e.get("expr") or e["name"]))
+            if e.get("type") == "foreign" and meta.get("inactive") and target and column:
+                for d in sm.get("dimensions") or []:
+                    if (d.get("expr") or d["name"]) == (e.get("expr") or e["name"]):
+                        userelationship_of[(sm["name"], d["name"])] = f"USERELATIONSHIP('{table}'[{column}], {target})"
     metrics = manifest.get("metrics") or []
     label_of = {x["name"]: x.get("label") or x["name"] for x in metrics}
     owner_of = {}
@@ -159,7 +177,7 @@ def _compiled_semantic_models(config: TmdlProjectConfig):
             continue
         description = x.get("description") or ""
         hand = description.split("DAX:", 1)[1].strip() if "DAX:" in description else ""
-        dax = hand or metric_dax.render(x, table_of, display_of, label_of, column_of)
+        dax = hand or metric_dax.render(x, table_of, display_of, label_of, column_of, userelationship_of)
         if not dax:
             raise SystemExit(f"metric {x['name']}: its {x.get('type')} definition has no DAX rendering; add "
                              "hand-written DAX after 'DAX:' in its description")

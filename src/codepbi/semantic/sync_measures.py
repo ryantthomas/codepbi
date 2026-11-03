@@ -128,6 +128,21 @@ def sync(config: TmdlProjectConfig, prune: bool = False):
     from Microsoft.AnalysisServices.Tabular import Measure
 
     updated = created = pruned = 0
+    elsewhere = []
+    # a measure that needs a table this model doesn't hold (e.g. a date table for USERELATIONSHIP), or a measure
+    # built on one, belongs to another model sharing these tables
+    skip = {}
+    for entries in by_table.values():
+        for entry in entries:
+            refs = [r for r in set(re.findall(r"'([^']+)'\[", entry["dax"])) if model.Tables.Find(r) is None]
+            if refs:
+                skip[entry["name"]] = sorted(refs)
+    while True:
+        more = {e["name"]: [f"[{n}]"] for es in by_table.values() for e in es if e["name"] not in skip
+                for n in skip if f"[{n}]" in e["dax"]}
+        if not more:
+            break
+        skip.update(more)
     missing = {t: len(v) for t, v in by_table.items() if model.Tables.Find(t) is None}
     if missing:
         print(f"Measures: {sum(missing.values())} on {len(missing)} table(s) not in this model, "
@@ -141,6 +156,11 @@ def sync(config: TmdlProjectConfig, prune: bool = False):
         for entry in entries:
             measure_name = entry["name"]
             dax = entry["dax"]
+            # a measure that needs a table this model doesn't hold (e.g. a date table for USERELATIONSHIP) belongs to
+            # another model sharing this table
+            if measure_name in skip:
+                elsewhere.append((table_name, measure_name, skip[measure_name]))
+                continue
             fmt = entry.get("formatString", "")
             folder = entry.get("displayFolder", "Calculations")
 
@@ -169,5 +189,7 @@ def sync(config: TmdlProjectConfig, prune: bool = False):
                 pruned += 1
 
     save_model(config, db)
+    for table_name, measure_name, refs in elsewhere:
+        print(f"Measures: {table_name}[{measure_name}] skipped, it references {refs}, not in this model.")
     print(f"Measures synced: {created} created, {updated} updated, {pruned} pruned "
           f"({total} total in config)")
