@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.14] - 2026-11-03
+
+### Added
+- Role-playing joins: a foreign entity with `config.meta.joins: <primary entity>` pairs with that primary entity
+  (e.g. a second date key joining the date table), since a model can't repeat an entity name.
+- A simple metric whose `agg_time_dimension` rides an inactive relationship renders with `USERELATIONSHIP`.
+- `sync-measures` skips, and reports, a measure that references a table the model doesn't hold, and any measure
+  built on it.
+
 ## [0.1.13] - 2026-11-02
 
 ### Added
