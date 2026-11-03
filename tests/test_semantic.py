@@ -112,6 +112,18 @@ class TestMetricGroups(unittest.TestCase):
         self.assertEqual(out["$schema"], report_measures.SCHEMA)
 
 
+class TestReportMeasureReferences(unittest.TestCase):
+    def test_lists_report_and_model_measures_used(self):
+        entry = {"formatString": "", "displayFolder": "", "description": "", "agg": None}
+        by_table = {"Orders": [{**entry, "name": "A", "dax": "SUM('Orders'[Amount])"},
+                               {**entry, "name": "B", "dax": "[A] + [Shared]"}]}
+        out = report_measures.build(by_table, {}, {"Shared": "Customers"})
+        b = out["entities"][0]["measures"][1]
+        self.assertEqual(b["references"]["measures"], [{"schema": "extension", "entity": "Orders", "name": "A"},
+                                                       {"entity": "Customers", "name": "Shared"}])
+        self.assertNotIn("references", out["entities"][0]["measures"][0])
+
+
 class TestSyncRelationshipsValidation(unittest.TestCase):
     def test_validate_passes_on_matched_primary_foreign(self):
         config = make_config(Path("."))
